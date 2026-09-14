@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900">
+  <rect width="600" height="900" fill="#12151a"/>
+  <circle cx="300" cy="340" r="160" fill="#2a3140"/>
+  <circle cx="300" cy="340" r="110" fill="#171b22"/>
+  <path d="M180 340 L300 180 L420 340 Z" fill="#d7dee8" opacity=".12"/>
+  <rect x="40" y="620" width="520" height="2" fill="#d7dee8" opacity=".35"/>
+  <text x="48" y="700" fill="#f2f4f7" font-family="Georgia, serif" font-size="56" font-weight="700">GLASS</text>
+  <text x="48" y="760" fill="#f2f4f7" font-family="Georgia, serif" font-size="56" font-weight="700">MERIDIAN</text>
+  <text x="48" y="820" fill="#9aa3ad" font-family="Arial, sans-serif" font-size="22" letter-spacing="4">R. V. LANG</text>
+</svg>
