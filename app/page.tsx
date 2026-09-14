@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { IMAGE_MODELS, ModelPicker, type ImageModel } from "@/components/model-picker";
 
 type Unit = "in" | "mm";
-type Provider = "openai" | "openrouter";
 type CoverConfig = { width: number; height: number; spine: number; bleed: number; dpi: number; unit: Unit };
 
 declare global {
@@ -36,9 +36,10 @@ export default function Home() {
   const [blurb, setBlurb] = useState("A cartographer finds a coastline that should not exist—and a route that may rewrite everything she knows about home.");
   const [direction, setDirection] = useState("Continue the visual world naturally onto the spine and back. Keep the mood cinematic, premium, and restrained.");
   const [apiKey, setApiKey] = useState("");
-  const [provider, setProvider] = useState<Provider>("openai");
+  const [selectedModel, setSelectedModel] = useState<ImageModel>(IMAGE_MODELS[0]);
   const [showKey, setShowKey] = useState(false);
-  const [status, setStatus] = useState<"idle" | "generating" | "ready" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "queued" | "analyzing" | "generating" | "compositing" | "ready" | "error">("idle");
+  const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -85,16 +86,25 @@ export default function Home() {
 
   const generate = async () => {
     if (!coverFile) { setError("Upload the finished front cover first."); fileInput.current?.click(); return; }
-    setStatus("generating"); setError("");
+    setStatus("queued"); setStatusMessage("Job accepted. Preparing your reference…"); setError("");
     const form = new FormData();
-    if (!apiKey.trim()) { setStatus("error"); setError(`Add your ${provider === "openrouter" ? "OpenRouter" : "OpenAI"} API key to generate the matched artwork.`); return; }
-    form.append("image", coverFile); form.append("direction", direction); form.append("title", title); form.append("author", author); form.append("apiKey", apiKey.trim()); form.append("provider", provider);
+    if (!apiKey.trim()) { setStatus("error"); setError(`Add your ${selectedModel.providerLabel} API key to generate the matched artwork.`); return; }
+    form.append("image", coverFile); form.append("direction", direction); form.append("title", title); form.append("author", author); form.append("apiKey", apiKey.trim()); form.append("model", selectedModel.id);
     form.append("width", String(config.width)); form.append("height", String(config.height)); form.append("spine", String(config.spine)); form.append("unit", config.unit);
     try {
       const response = await fetch("/api/generate", { method: "POST", body: form });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Generation failed. Please try again.");
-      setGeneratedUrl(`data:image/${data.format || "png"};base64,${data.image}`); setStatus("ready");
+      if (!response.ok) { const data = await response.json(); throw new Error(data.error || "Generation failed. Please try again."); }
+      if (!response.body) throw new Error("The generation stream could not be opened.");
+      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n"); buffer = lines.pop() || "";
+        for (const line of lines) { if (!line.trim()) continue; const event = JSON.parse(line) as { type: string; stage?: typeof status; message?: string; image?: string; format?: string; error?: string };
+          if (event.type === "status" && event.stage) { setStatus(event.stage); setStatusMessage(event.message || ""); }
+          if (event.type === "result" && event.image) { setStatus("compositing"); setStatusMessage("Building the exact-size print canvas…"); setGeneratedUrl(`data:image/${event.format || "png"};base64,${event.image}`); setStatus("ready"); setStatusMessage("Matched artwork ready."); }
+          if (event.type === "error") throw new Error(event.error || "Generation failed. Please try again.");
+        }
+      }
     } catch (cause) { setStatus("error"); setError(cause instanceof Error ? cause.message : "Generation failed. Please try again."); }
   };
 
@@ -155,10 +165,10 @@ export default function Home() {
         <div className="section-rule"><span>03 / Cover copy</span><ImagePlus /></div>
         <div className="copy-grid"><div className="field-stack"><Label>Book title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} /></div><div className="field-stack"><Label>Author</Label><Input value={author} onChange={(e) => setAuthor(e.target.value)} /></div><div className="field-stack full"><Label>Back-cover copy</Label><Textarea value={blurb} onChange={(e) => setBlurb(e.target.value)} rows={3} /></div><div className="field-stack full"><Label>Art direction</Label><Textarea value={direction} onChange={(e) => setDirection(e.target.value)} rows={3} /></div></div>
         <div className="section-rule key-rule"><span>04 / Image model</span><KeyRound /></div>
-        <div className="provider-row"><div><Label>Provider</Label><small>{provider === "openrouter" ? "GPT Image 2 via OpenRouter" : "GPT Image 2.5 Sunburst"}</small></div><Select value={provider} onValueChange={(v) => { setProvider(v as Provider); setApiKey(""); setError(""); }}><SelectTrigger className="provider-select"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI</SelectItem><SelectItem value="openrouter">OpenRouter</SelectItem></SelectContent></Select></div>
-        <div className="field-stack api-key-field"><Label htmlFor="api-key">{provider === "openrouter" ? "OpenRouter" : "OpenAI"} API key</Label><div className="secret-input"><Input id="api-key" type={showKey ? "text" : "password"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={provider === "openrouter" ? "sk-or-v1-…" : "sk-…"} autoComplete="off" spellCheck={false} /><button type="button" aria-label={showKey ? "Hide API key" : "Show API key"} onClick={() => setShowKey((shown) => !shown)}>{showKey ? <EyeOff /> : <Eye />}</button></div><small>Used once for this generation request. Never saved.</small></div>
+        <ModelPicker value={selectedModel} onChange={(model) => { setSelectedModel(model); setApiKey(""); setError(""); }} />
+        <div className="field-stack api-key-field"><Label htmlFor="api-key">{selectedModel.providerLabel} API key</Label><div className="secret-input"><Input id="api-key" type={showKey ? "text" : "password"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={selectedModel.provider === "openrouter" ? "sk-or-v1-…" : "sk-…"} autoComplete="off" spellCheck={false} /><button type="button" aria-label={showKey ? "Hide API key" : "Show API key"} onClick={() => setShowKey((shown) => !shown)}>{showKey ? <EyeOff /> : <Eye />}</button></div><small>Used for this live job only. Never queued or saved.</small></div>
         {error && <div className="error-message" role="alert">{error}</div>}
-        <Button className="generate-button" onClick={generate} disabled={status === "generating"}>{status === "generating" ? <LoaderCircle className="spin" /> : <Sparkles />}{status === "generating" ? "Extending cover…" : "Generate matched wrap"}</Button>
+        <Button className="generate-button" onClick={generate} disabled={["queued","analyzing","generating","compositing"].includes(status)}>{["queued","analyzing","generating","compositing"].includes(status) ? <LoaderCircle className="spin" /> : <Sparkles />}{["queued","analyzing","generating","compositing"].includes(status) ? "Generation in progress…" : "Generate matched wrap"}</Button>
       </aside>
       <section className="preview-panel">
         <div className="preview-header"><div><p className="eyebrow">Live production preview</p><h2>Full cover spread</h2></div><div className="size-readout"><span>{totalDisplay.toFixed(3)} × {heightDisplay.toFixed(3)} {config.unit}</span><strong>{dims.totalW.toLocaleString()} × {dims.totalH.toLocaleString()} px</strong></div></div>
@@ -166,6 +176,7 @@ export default function Home() {
           <div className="panel back-panel" style={generatedUrl ? { backgroundImage: `linear-gradient(rgba(8,14,21,.48), rgba(8,14,21,.48)), url(${generatedUrl})` } : undefined}>{ready ? <><p className="back-copy">{blurb}</p><div className="barcode"><span /><span /><span /><span /><span /><small>0 00250 61524 8</small></div></> : <div className="empty-copy"><ImagePlus /><strong>Your matched artwork</strong><span>will continue here</span></div>}</div>
           <div className="panel spine-panel" style={generatedUrl ? { backgroundImage: `url(${generatedUrl})` } : undefined}><span>{ready ? title : "SPINE"}</span></div>
           <div className="panel front-panel">{coverUrl ? <img src={coverUrl} alt="Front cover preview" /> : <div className="front-placeholder"><span>FRONT</span><strong>Upload<br />cover</strong><small>to begin</small></div>}</div><i className="bleed-line" />
+          {["queued","analyzing","generating","compositing"].includes(status) && <div className="job-overlay"><span className="job-orbit"><LoaderCircle /></span><p><small>LIVE JOB · {selectedModel.name.toUpperCase()}</small><strong>{statusMessage || "Preparing generation…"}</strong><em>Keep this tab open — your key stays in memory only.</em></p></div>}
         </div><div className="dimension-line"><span /><strong>{totalDisplay.toFixed(3)} {config.unit}</strong><span /></div></div>
         <div className="quality-strip"><div><span className="quality-icon">300</span><p><strong>Print resolution</strong><small>{config.dpi} DPI export</small></p></div><div><span className="quality-icon">↔</span><p><strong>Exact geometry</strong><small>Trim, spine & bleed guides</small></p></div><div><span className="quality-icon">AI</span><p><strong>Style matched</strong><small>{generatedUrl ? "Artwork generated" : "Ready after upload"}</small></p></div></div>
         <div className="export-bar"><div><p className="eyebrow">Production export</p><strong>{status === "ready" ? "Your wrap is ready for preflight." : "Generate artwork, then export exact-size PNGs."}</strong></div><div className="export-actions"><Button variant="outline" onClick={() => download("front")} disabled={!ready}><Download /> Front</Button><Button variant="outline" onClick={() => download("spine")} disabled={status !== "ready"}><Download /> Spine</Button><Button variant="outline" onClick={() => download("back")} disabled={status !== "ready"}><Download /> Back</Button><Button className="download-wrap" onClick={() => download("wrap")} disabled={status !== "ready"}><Download /> Full wrap</Button></div></div>
