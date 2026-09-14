@@ -1,5 +1,3 @@
-import { env } from "cloudflare:workers";
-
 export const runtime = "edge";
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 const MODELS = {
@@ -29,22 +27,30 @@ export async function POST(request: Request) {
     const model = MODELS[modelId];
     if (!model) return Response.json({ error: "Choose a supported image model." }, { status: 400 });
     const suppliedKey = String(data.get("apiKey") || "").trim();
-    const fallbackKey = model.provider === "openai" ? (env as unknown as Record<string, string | undefined>).OPENAI_API_KEY : undefined;
+    const fallbackKey = model.provider === "openai" ? process.env.OPENAI_API_KEY : undefined;
     const apiKey = suppliedKey || fallbackKey;
     if (!apiKey || !apiKey.startsWith("sk-")) return Response.json({ error: `Add a valid ${model.provider === "openrouter" ? "OpenRouter" : "OpenAI"} API key to generate artwork.` }, { status: 401 });
 
     const title = String(data.get("title") || "Untitled").slice(0, 180);
     const author = String(data.get("author") || "").slice(0, 180);
+    const blurb = String(data.get("blurb") || "").slice(0, 800);
+    const reviews = String(data.get("reviews") || "").slice(0, 800);
+    const isbn = String(data.get("isbn") || "").slice(0, 32);
     const direction = String(data.get("direction") || "").slice(0, 1200);
     const width = Number(data.get("width")), height = Number(data.get("height")), spine = Number(data.get("spine"));
     const unit = data.get("unit") === "mm" ? "millimeters" : "inches";
     const prompt = [
       "Create one seamless, landscape, full-wrap book-cover artwork using the uploaded FRONT cover as the strict visual reference.",
-      "Layout from left to right: back cover, narrow spine, front cover. Continue the same scene, palette, lighting, texture, technique, grain, and edge details naturally across all three areas.",
+      "Layout from left to right: BACK COVER, narrow SPINE, FRONT COVER. Continue the same scene, palette, lighting, texture, technique, grain, and edge details across all three areas.",
       `Physical layout: each cover panel is ${width} × ${height} ${unit}; spine is ${spine} ${unit}. The front panel belongs on the RIGHT.`,
-      `The book is titled ${JSON.stringify(title)}${author ? ` by ${JSON.stringify(author)}` : ""}, but do not render any words.`,
-      "Do not add typography, letters, logos, badges, borders, crop marks, mockup perspective, hands, books, barcodes, or publisher marks. Output only flat print artwork viewed straight-on.",
-      "Keep the front reference recognizable and use high visual fidelity. Make the back calmer with intentional negative space for copy. Keep the spine visually continuous and uncluttered.",
+      `Book: ${JSON.stringify(title)}${author ? ` by ${JSON.stringify(author)}` : ""}.`,
+      "FRONT (right): Keep the uploaded cover recognizable. Do not restyle or rewrite its existing title treatment.",
+      "SPINE (center): Paint large, confident, print-scale typography — title and author — using the same type family, weight, tracking, and color language as the front. The letters should fill most of the spine width, like a real hardcover, not caption-sized or hairline type.",
+      "BACK (left): Finish it like a real trade-paperback back. Include:",
+      blurb ? `a short synopsis: ${JSON.stringify(blurb)}` : "a short synopsis in the upper half,",
+      reviews ? `two or three review pull-quotes: ${JSON.stringify(reviews)}` : "two or three short review pull-quotes with attributions (newspapers or magazines),",
+      isbn ? `an ISBN barcode using ${JSON.stringify(isbn)} in the lower-left, with the digits printed under the bars.` : "an ISBN barcode in the lower-left.",
+      "Keep back typography large enough to read, with generous margins. No mockup perspective, hands, or 3D book. Flat print artwork, viewed straight-on.",
       direction ? `Creative direction: ${direction}` : "",
     ].filter(Boolean).join("\n");
 
