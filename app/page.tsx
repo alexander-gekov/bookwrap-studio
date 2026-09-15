@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  BookOpen,
   Check,
   ChevronDown,
   Download,
@@ -497,7 +498,9 @@ export default function Home() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">B</span>
+          <span className="brand-mark" aria-hidden="true">
+            <BookOpen />
+          </span>
           <div>
             <strong>Bookwrap</strong>
             <small>Front → spine → back</small>
