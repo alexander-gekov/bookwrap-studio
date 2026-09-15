@@ -290,7 +290,16 @@ html, body { overflow-x: hidden; }
 .size-readout span { font-size: 12px; color: var(--soft); }
 .size-readout strong { font-size: 13px; }
 
-.stage { margin-top: 18px; }
+.preview-tabs { margin-top: 16px; }
+.preview-tab-list {
+  width: fit-content !important; height: auto !important; padding: 4px !important;
+  display: grid !important; grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--line); border-radius: 10px !important; background: #e9ece6 !important;
+}
+.preview-tab-list [data-slot="tabs-trigger"] {
+  min-width: 108px; height: 32px; border-radius: 7px !important; font-size: 12px !important;
+}
+.preview-tab-content { margin-top: 12px; }
 .stage-scroll {
   width: 100%;
   overflow-x: auto;
@@ -428,12 +437,7 @@ html, body { overflow-x: hidden; }
   font-size: 11px; font-weight: 650; backdrop-filter: blur(8px);
 }
 .three-job-status svg { width: 15px; animation: spin 1s linear infinite; }
-.flat-preview { padding-top: 24px; }
-.flat-preview-title {
-  margin-bottom: 10px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-}
-.flat-preview-title span { font-size: 13px; font-weight: 750; }
-.flat-preview-title small { color: var(--soft); font-size: 11px; }
+.flat-preview { padding-top: 0; }
 
 .model-trigger {
   width: 100%; min-width: 0; min-height: 60px; padding: 10px 12px;
@@ -579,7 +583,7 @@ html, body { overflow-x: hidden; }
   }
   .size-readout { text-align: left; }
   .three-book-shell { height: min(78vw, 430px); min-height: 320px; }
-  .flat-preview { display: none; }
+  .preview-tab-list { width: 100% !important; }
   .text-btn {
     min-height: 44px;
     padding: 10px 4px;

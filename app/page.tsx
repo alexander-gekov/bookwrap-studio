@@ -707,7 +707,7 @@ export default function Home() {
           <div className="preview-header">
             <div>
               <p className="eyebrow">Live preview</p>
-              <h2>Interactive book</h2>
+              <h2>Cover preview</h2>
             </div>
             <div className="size-readout">
               <span>
@@ -719,27 +719,30 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="stage">
-            <div className="three-preview">
-              <BookPreview3D
-                frontUrl={coverUrl}
-                wrapUrl={generatedUrl}
-                trimWidth={config.width}
-                trimHeight={config.height}
-                spineWidth={config.spine}
-              />
-              {isBusy(status) && (
-                <div className="three-job-status">
-                  <LoaderCircle />
-                  <span>{statusMessage || "Generating your wrap…"}</span>
-                </div>
-              )}
-            </div>
-            <div className="flat-preview">
-              <div className="flat-preview-title">
-                <span>Print spread</span>
-                <small>Back · spine · front</small>
+          <Tabs defaultValue="book" className="preview-tabs">
+            <TabsList className="preview-tab-list">
+              <TabsTrigger value="book">3D book</TabsTrigger>
+              <TabsTrigger value="spread">Print spread</TabsTrigger>
+            </TabsList>
+            <TabsContent value="book" className="preview-tab-content">
+              <div className="three-preview">
+                <BookPreview3D
+                  frontUrl={coverUrl}
+                  wrapUrl={generatedUrl}
+                  trimWidth={config.width}
+                  trimHeight={config.height}
+                  spineWidth={config.spine}
+                />
+                {isBusy(status) && (
+                  <div className="three-job-status">
+                    <LoaderCircle />
+                    <span>{statusMessage || "Generating your wrap…"}</span>
+                  </div>
+                )}
               </div>
+            </TabsContent>
+            <TabsContent value="spread" className="preview-tab-content">
+              <div className="flat-preview">
               <div className="stage-labels">
                 <span>BACK</span>
                 <span>SPINE</span>
@@ -813,7 +816,8 @@ export default function Home() {
                 </motion.div>
               </div>
             </div>
-          </div>
+            </TabsContent>
+          </Tabs>
         </section>
       </section>
 
