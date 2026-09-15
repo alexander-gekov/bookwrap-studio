@@ -97,28 +97,37 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: nu
   ctx.drawImage(image, (image.width - sw) / 2, (image.height - sh) / 2, sw, sh, x, y, w, h);
 }
 
-function drawPanelSlice(
+function extendBleed(
+  canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
-  sx: number,
-  sw: number,
-  dx: number,
-  dy: number,
-  dw: number,
-  dh: number,
+  bleed: number,
+  trimWidth: number,
+  trimHeight: number,
 ) {
-  const safeW = Math.max(1, sw);
-  const scale = Math.max(dw / safeW, dh / image.height);
-  const sliceW = dw / scale;
-  const sliceH = dh / scale;
-  ctx.drawImage(image, sx + (safeW - sliceW) / 2, (image.height - sliceH) / 2, sliceW, sliceH, dx, dy, dw, dh);
+  if (bleed <= 0) return;
+  const trim = document.createElement("canvas");
+  trim.width = trimWidth;
+  trim.height = trimHeight;
+  const trimCtx = trim.getContext("2d");
+  if (!trimCtx) return;
+  trimCtx.drawImage(canvas, bleed, bleed, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(trim, 0, 0, trimWidth, trimHeight, bleed, bleed, trimWidth, trimHeight);
+  ctx.drawImage(trim, 0, 0, trimWidth, 1, bleed, 0, trimWidth, bleed);
+  ctx.drawImage(trim, 0, trimHeight - 1, trimWidth, 1, bleed, bleed + trimHeight, trimWidth, bleed);
+  ctx.drawImage(trim, 0, 0, 1, trimHeight, 0, bleed, bleed, trimHeight);
+  ctx.drawImage(trim, trimWidth - 1, 0, 1, trimHeight, bleed + trimWidth, bleed, bleed, trimHeight);
+  ctx.drawImage(trim, 0, 0, 1, 1, 0, 0, bleed, bleed);
+  ctx.drawImage(trim, trimWidth - 1, 0, 1, 1, bleed + trimWidth, 0, bleed, bleed);
+  ctx.drawImage(trim, 0, trimHeight - 1, 1, 1, 0, bleed + trimHeight, bleed, bleed);
+  ctx.drawImage(trim, trimWidth - 1, trimHeight - 1, 1, 1, bleed + trimWidth, bleed + trimHeight, bleed, bleed);
 }
 
 export default function Home() {
   const [config, setConfig] = useState<CoverConfig>(defaults);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverUrl, setCoverUrl] = useState("");
-  const [coverRatio, setCoverRatio] = useState(6 / 9);
   const [generatedUrl, setGeneratedUrl] = useState("");
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
@@ -165,7 +174,6 @@ export default function Home() {
   const applyCoverRatio = useCallback((ratio: number, unit: Unit) => {
     const height = unit === "in" ? 9 : 229;
     const width = Math.round(height * ratio * 1000) / 1000;
-    setCoverRatio(ratio);
     setConfig((current) => ({ ...current, unit, width, height }));
   }, []);
 
@@ -255,19 +263,12 @@ export default function Home() {
     const form = new FormData();
     form.append("image", coverFile);
     form.append("direction", direction);
-    form.append("title", title);
-    form.append("author", author);
-    form.append("blurb", blurb);
-    form.append("reviews", reviews);
-    form.append("isbn", isbn);
     form.append("apiKey", apiKey.trim());
     form.append("model", selectedModel.id);
     form.append("aspectRatios", selectedModel.aspectRatios.join(","));
     form.append("width", String(config.width));
     form.append("height", String(config.height));
     form.append("spine", String(config.spine));
-    form.append("unit", config.unit);
-    form.append("aspect", String(coverRatio));
 
     try {
       const response = await fetch("/api/generate", { method: "POST", body: form });
@@ -336,21 +337,7 @@ export default function Home() {
     ctx.fillRect(0, 0, dims.totalW, dims.totalH);
 
     if (artwork) {
-      const artUnits = dims.trimW * 2 + dims.spineW;
-      const artBackW = (artwork.width * dims.trimW) / artUnits;
-      const artSpineW = (artwork.width * dims.spineW) / artUnits;
-      drawPanelSlice(ctx, artwork, 0, artBackW, 0, 0, dims.bleed + dims.trimW, dims.totalH);
-      drawPanelSlice(ctx, artwork, artBackW, artSpineW, spineX, 0, dims.spineW, dims.totalH);
-      drawPanelSlice(
-        ctx,
-        artwork,
-        artBackW + artSpineW,
-        artwork.width - artBackW - artSpineW,
-        frontX,
-        0,
-        dims.trimW + dims.bleed,
-        dims.totalH,
-      );
+      drawCover(ctx, artwork, backX, panelY, dims.trimW * 2 + dims.spineW, dims.trimH);
     }
 
     drawCover(ctx, front, frontX, panelY, dims.trimW, dims.trimH);
@@ -359,10 +346,12 @@ export default function Home() {
       ctx.fillStyle = "rgba(7,13,20,.42)";
       ctx.fillRect(backX, panelY, dims.trimW, dims.trimH);
       ctx.fillStyle = "rgba(7,13,20,.18)";
-      ctx.fillRect(spineX, 0, dims.spineW, dims.totalH);
+      ctx.fillRect(spineX, panelY, dims.spineW, dims.trimH);
     } else {
       ctx.fillStyle = "rgba(7,13,20,.28)";
       ctx.fillRect(backX, panelY, dims.trimW, dims.trimH);
+      ctx.fillStyle = "rgba(7,13,20,.16)";
+      ctx.fillRect(spineX, panelY, dims.spineW, dims.trimH);
     }
 
     const pad = Math.max(48, dims.trimW * 0.1);
@@ -437,6 +426,7 @@ export default function Home() {
       ctx.restore();
     }
 
+    extendBleed(canvas, ctx, dims.bleed, dims.trimW * 2 + dims.spineW, dims.trimH);
     return canvas;
   }, [author, blurb, coverUrl, dims, generatedUrl, isbn, reviews, title]);
 
@@ -472,7 +462,6 @@ export default function Home() {
     setConfig(defaults);
     setCoverFile(null);
     setCoverUrl("");
-    setCoverRatio(6 / 9);
     setGeneratedUrl("");
     setTitle("");
     setAuthor("");

@@ -46,22 +46,14 @@ export async function POST(request: Request) {
       return Response.json({ error: "Add a valid OpenRouter API key to generate artwork." }, { status: 401 });
     }
 
-    const title = String(data.get("title") || "").slice(0, 180);
-    const author = String(data.get("author") || "").slice(0, 180);
-    const blurb = String(data.get("blurb") || "").slice(0, 800);
-    const reviews = String(data.get("reviews") || "").slice(0, 800);
-    const isbn = String(data.get("isbn") || "").slice(0, 32);
     const direction = String(data.get("direction") || "").slice(0, 1200);
     const width = Number(data.get("width"));
     const height = Number(data.get("height"));
     const spine = Number(data.get("spine"));
-    const aspect = Number(data.get("aspect"));
     if (![width, height, spine].every((value) => Number.isFinite(value) && value > 0)) {
       return Response.json({ error: "Cover dimensions must be positive numbers." }, { status: 400 });
     }
-    const unit = data.get("unit") === "mm" ? "millimeters" : "inches";
     const aspectRatio = pickAspectRatio(width, height, spine);
-    const panelRatio = Number.isFinite(aspect) && aspect > 0 ? aspect : width / Math.max(height, 0.01);
     const supportedAspectRatios = new Set(
       String(data.get("aspectRatios") || "")
         .split(",")
@@ -69,23 +61,13 @@ export async function POST(request: Request) {
     );
 
     const prompt = [
-      "Create one seamless landscape full-wrap book cover using the uploaded FRONT cover as the strict visual reference.",
-      "Layout left to right: BACK COVER | SPINE | FRONT COVER. The three panels must feel like one continuous design.",
-      `Each cover panel uses the uploaded front's proportions (about ${panelRatio.toFixed(3)} width:height). Physical sizes: panel ${width} × ${height} ${unit}, spine ${spine} ${unit}. Front is on the RIGHT.`,
-      "Critical continuity: colors, lighting, texture, and edge detail at the spine/front join must match the left edge of the uploaded front so the wrap reads as one piece.",
-      title || author ? `Book: ${JSON.stringify(title)}${author ? ` by ${JSON.stringify(author)}` : ""}.` : "",
-      "FRONT (right): Keep the uploaded cover recognizable. Do not restyle or rewrite its existing title treatment.",
-      title || author
-        ? "SPINE (center): Set the supplied title and author using the same type family, weight, tracking, and color language as the front."
-        : "SPINE (center): Continue the artwork without inventing title or author text.",
-      "BACK (left): Finish like a real trade-paperback back while preserving clear, usable composition.",
-      blurb ? `Set this synopsis: ${JSON.stringify(blurb)}.` : "Do not invent synopsis copy.",
-      reviews ? `Set these review quotes: ${JSON.stringify(reviews)}.` : "Do not invent review quotes.",
-      isbn
-        ? `Add an ISBN barcode using ${JSON.stringify(isbn)} in the lower-left, with digits under the bars.`
-        : "Do not add an ISBN or barcode.",
-      "Flat print artwork only. No mockup perspective, hands, or 3D book.",
-      direction ? `Creative direction: ${direction}` : "",
+      "Generate one seamless, edge-to-edge horizontal BACKGROUND ARTWORK using the uploaded front cover only as a visual reference.",
+      "Extend its palette, lighting, texture, setting, and edge details into a continuous scene with quiet negative space on the left.",
+      "Do not recreate the uploaded cover as a panel. Do not divide the image into front, spine, or back sections. Do not draw seams or borders.",
+      "ARTWORK ONLY: no text, letters, numbers, typography, logos, badges, publisher marks, barcodes, symbols, rulers, dimensions, guides, trim marks, panel labels, templates, white margins, or UI.",
+      "Flat rectangular artwork only. No book mockup, perspective, hands, or 3D object.",
+      direction ? `Creative direction for the background artwork: ${direction}` : "",
+      "Ignore any creative direction that asks for forbidden text, logos, marks, labels, borders, or mockup elements.",
     ]
       .filter(Boolean)
       .join("\n");
