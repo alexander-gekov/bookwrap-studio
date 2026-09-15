@@ -543,7 +543,7 @@ export default function Home() {
         </Hint>
       </header>
 
-      <section className="hero">
+      <section className={`hero ${ready ? "compact" : ""}`}>
         <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
           Turn a front cover into a full wrap.
         </motion.h1>
@@ -553,7 +553,8 @@ export default function Home() {
       </section>
 
       <motion.section
-        className="workspace"
+        className={`workspace ${ready ? "" : "landing"}`}
+        layout
         initial={{ opacity: 0, y: 28 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
@@ -611,8 +612,8 @@ export default function Home() {
               )}
             </AnimatePresence>
             <div>
-              <strong>{dragging ? "Release to upload" : coverFile?.name || "Drop your front cover"}</strong>
-              <span>{coverFile ? "Click to replace · proportions locked to this image" : "PNG, JPG, or WebP · max 15 MB"}</span>
+              <strong>{dragging ? "Release to upload" : coverFile?.name || "Drop your front cover here"}</strong>
+              <span>{coverFile ? "Click to replace · proportions locked to this image" : "or click to browse · PNG, JPG, or WebP · max 15 MB"}</span>
             </div>
             <AnimatePresence>
               {ready && (
@@ -822,7 +823,13 @@ export default function Home() {
           </Tabs>
         </aside>
 
-        <section className="preview-panel">
+        {ready && (
+        <motion.section
+          className="preview-panel"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        >
           <div className="preview-header">
             <div>
               <p className="eyebrow">Live preview</p>
@@ -958,7 +965,8 @@ export default function Home() {
               </motion.div>
             </TabsContent>
           </Tabs>
-        </section>
+        </motion.section>
+        )}
       </motion.section>
 
       <canvas ref={canvasRef} hidden />
