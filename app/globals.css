@@ -77,29 +77,7 @@ html, body { overflow-x: hidden; }
 
 .app-shell {
   position: relative; min-height: 100vh; overflow: hidden;
-  background:
-    radial-gradient(ellipse at 72% 13%, rgba(255, 255, 255, 0.82) 0 7%, transparent 7.5%),
-    radial-gradient(ellipse at 79% 16%, rgba(255, 255, 255, 0.62) 0 10%, transparent 10.5%),
-    linear-gradient(180deg, #2297e6 0 29%, #75c9ed 48%, #aadf8a 48%, #4d9d59 75%, #246846 100%);
-}
-.app-shell::before,
-.app-shell::after {
-  content: ""; position: absolute; z-index: 0; pointer-events: none;
-}
-.app-shell::before {
-  top: 165px; right: -9vw; width: 58vw; height: 240px;
-  border-radius: 58% 42% 0 0 / 80% 65% 0 0;
-  background:
-    radial-gradient(circle at 72% 28%, #2f774a 0 6%, transparent 6.5%),
-    radial-gradient(circle at 62% 35%, #4e9b53 0 12%, transparent 12.5%),
-    radial-gradient(circle at 42% 48%, #71bb61 0 18%, transparent 18.5%),
-    linear-gradient(145deg, #87cb65, #2f774a);
-  opacity: 0.88;
-}
-.app-shell::after {
-  top: 118px; right: 23vw; width: 180px; height: 70px;
-  border-radius: 999px; background: rgba(255, 255, 255, 0.42);
-  box-shadow: 55px -22px 0 rgba(255, 255, 255, 0.32), 118px 4px 0 rgba(255, 255, 255, 0.26);
+  background: var(--hill-dark);
 }
 .topbar,
 .hero,
@@ -141,15 +119,23 @@ html, body { overflow-x: hidden; }
 .text-btn:hover { color: #fff; }
 
 .hero {
-  min-height: 285px; padding: 54px clamp(18px, 5vw, 72px) 58px;
-  max-width: 850px; color: #fff;
+  min-height: 350px; padding: 74px clamp(18px, 5vw, 72px) 72px;
+  max-width: none; color: #fff;
+  background-image:
+    linear-gradient(90deg, rgba(4, 40, 65, 0.46), rgba(4, 40, 65, 0.03) 64%),
+    url("/art/bookwrap-landscape-desktop.png");
+  background-position: center 61%;
+  background-size: cover;
+  image-rendering: pixelated;
 }
 .hero h1 {
   margin: 0;
+  max-width: 820px;
   font-size: clamp(34px, 5vw, 52px);
   line-height: 1.05;
   letter-spacing: -0.045em;
   font-weight: 700;
+  text-shadow: 0 2px 22px rgba(4, 35, 55, 0.3);
 }
 .hero p {
   margin: 14px 0 0;
@@ -404,18 +390,8 @@ html, body { overflow-x: hidden; }
 .three-preview { position: relative; }
 .three-book-shell {
   position: relative; height: clamp(360px, 48vw, 560px); overflow: hidden;
-  background:
-    radial-gradient(circle at 72% 19%, rgba(255, 255, 255, 0.78) 0 7%, transparent 7.5%),
-    radial-gradient(circle at 81% 22%, rgba(255, 255, 255, 0.5) 0 11%, transparent 11.5%),
-    linear-gradient(180deg, #75c9ed 0 60%, #87c96c 60% 73%, #3f8651 100%);
-}
-.three-book-shell::before {
-  content: ""; position: absolute; right: -7%; bottom: 19%; width: 54%; height: 31%;
-  border-radius: 70% 0 0 0; background: linear-gradient(140deg, #78bd62, #2f774a);
-}
-.three-book-shell::after {
-  content: ""; position: absolute; left: -8%; bottom: 14%; width: 48%; height: 24%;
-  border-radius: 0 80% 0 0; background: linear-gradient(35deg, #286b48, #67ad5c);
+  background: url("/art/bookwrap-landscape-desktop.png") center 62% / cover no-repeat;
+  image-rendering: pixelated;
 }
 .three-book-canvas { position: absolute; inset: 0; z-index: 1; touch-action: none; cursor: grab; }
 .three-book-canvas:active { cursor: grabbing; }
@@ -564,7 +540,13 @@ html, body { overflow-x: hidden; }
   }
   .step-nav .active { background: var(--ink); color: var(--accent); }
   .step-nav .done { background: #eef1b7; color: #3e4b0a; }
-  .hero { min-height: 230px; padding: 34px 16px 38px; }
+  .hero {
+    min-height: 330px; padding: 46px 16px 44px;
+    background-image:
+      linear-gradient(180deg, rgba(4, 40, 65, 0.42), rgba(4, 40, 65, 0.02) 75%),
+      url("/art/bookwrap-landscape-mobile.png");
+    background-position: center 45%;
+  }
   .hero h1 { font-size: clamp(28px, 9vw, 40px); }
   .hero p { font-size: 16px; margin-top: 10px; }
   .workspace {
