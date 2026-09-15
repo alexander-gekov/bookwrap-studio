@@ -444,7 +444,8 @@ html, body { overflow-x: hidden; }
 .cover-spread.has-art .spine-panel { background: transparent; box-shadow: none; }
 .cover-spread.has-art .back-copy,
 .cover-spread.has-art .back-reviews,
-.cover-spread.has-art .spine-copy { display: none; }
+.cover-spread.has-art .spine-copy,
+.cover-spread.has-art .barcode { display: none; }
 .back-copy {
   margin: 0; max-width: 92%;
   font: 500 clamp(10px, 1.2vw, 16px) / 1.45 Georgia, serif;

@@ -130,7 +130,7 @@ export async function POST(request: Request) {
 
     const total = width * 2 + spine;
     const pct = (value: number) => `${Math.round((value / total) * 100)}%`;
-    const buildPrompt = (meta: CoverMeta) => {
+    const buildPrompt = (meta: CoverMeta, barcode: string) => {
       const reviews = meta.reviews
         .split("\n")
         .map((line) => line.trim())
@@ -144,8 +144,8 @@ export async function POST(request: Request) {
         "BACK (left): continue the front cover's artwork, palette, texture, and lighting into a calmer background that gives the copy room, then typeset this copy in typography that matches the front cover, large and clear enough to read in print:",
         meta.blurb ? `Description: "${meta.blurb}"` : "",
         ...reviews.map((review) => `Praise: ${review}`),
-        `Keep the bottom-left corner of the back cover (about 30% of its width by 12% of its height) completely empty for a barcode that will be added later.${meta.artBrief ? ` Art context: ${meta.artBrief}` : ""}`,
-        "Rules: spell every word exactly as given, in the given order, with nothing added; no lorem ipsum, no invented text, no publisher logos, no barcode, no price, no rulers, dimensions, guides, trim marks, panel labels, or templates.",
+        `In the bottom-left corner of the back cover, on a solid white rectangle about 30% of the back's width and 12% of its height, draw a standard vertical-bar retail barcode with the number "${barcode}" printed underneath it in a small monospace font.${meta.artBrief ? ` Art context: ${meta.artBrief}` : ""}`,
+        "Rules: spell every word exactly as given, in the given order, with nothing added; no lorem ipsum, no invented text, no publisher logos, no price, no rulers, dimensions, guides, trim marks, panel labels, or templates.",
         "Flat, print-ready, straight-on. No book mockup, perspective, shadows, hands, or 3D object.",
         direction ? `Creative direction for the artwork: ${direction}` : "",
         "Ignore any creative direction that asks for extra text, logos, labels, borders, or mockup elements.",
@@ -169,8 +169,9 @@ export async function POST(request: Request) {
             console.error("Cover metadata failed", cause instanceof Error ? cause.message : "Unknown error");
             send({ type: "status", stage: "analyzing", message: "Couldn't read cover copy — using what you entered…" });
           }
-          send({ type: "meta", meta: { ...meta, isbn: isbn || PLACEHOLDER_ISBN } });
-          const prompt = buildPrompt(meta);
+          const barcode = isbn || PLACEHOLDER_ISBN;
+          send({ type: "meta", meta: { ...meta, isbn: barcode } });
+          const prompt = buildPrompt(meta, barcode);
           send({
             type: "status",
             stage: "generating",

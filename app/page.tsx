@@ -122,7 +122,7 @@ type Dims = { trimW: number; trimH: number; spineW: number; bleed: number; total
 function drawPlaceholderCopy(
   ctx: CanvasRenderingContext2D,
   dims: Dims,
-  copy: { title: string; author: string; blurb: string; reviews: string },
+  copy: { title: string; author: string; blurb: string; reviews: string; isbn: string },
 ) {
   const backX = dims.bleed;
   const spineX = dims.bleed + dims.trimW;
@@ -180,6 +180,27 @@ function drawPlaceholderCopy(
       ctx.fillText(copy.author.toUpperCase(), 0, titleSize * 0.42, dims.trimH * 0.7);
     }
     ctx.restore();
+  }
+
+  const isbnDigits = copy.isbn.replace(/[^\dX]/gi, "");
+  if (isbnDigits || copy.isbn.trim()) {
+    const boxW = Math.max(220, dims.trimW * 0.28);
+    const boxH = Math.max(90, dims.trimH * 0.09);
+    const bx = backX + pad;
+    const by = panelY + dims.trimH - pad - boxH;
+    ctx.fillStyle = "#fffdf4";
+    ctx.fillRect(bx, by, boxW, boxH);
+    ctx.fillStyle = "#111922";
+    const barCount = Math.max(24, isbnDigits.length * 2);
+    for (let i = 0; i < barCount; i++) {
+      const wide = (isbnDigits.charCodeAt(i % Math.max(isbnDigits.length, 1)) || 48) % 3 === 0;
+      ctx.fillRect(bx + 10 + i * ((boxW - 20) / barCount), by + 10, wide ? 3 : 1.5, boxH * 0.58);
+    }
+    ctx.font = `600 ${Math.max(14, Math.round(boxH * 0.16))}px Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(copy.isbn.trim() || isbnDigits, bx + boxW / 2, by + boxH - 10);
+    ctx.textAlign = "start";
   }
 }
 
@@ -433,31 +454,9 @@ export default function Home() {
 
     drawCover(ctx, front, frontX, panelY, dims.trimW, dims.trimH);
 
-    const pad = Math.max(48, dims.trimW * 0.1);
-
-    // Generated artwork carries its own typography; canvas text is only the pre-generation placeholder.
-    if (!artwork) drawPlaceholderCopy(ctx, dims, { title, author, blurb, reviews });
-
-    const isbnDigits = isbn.replace(/[^\dX]/gi, "");
-    if (isbnDigits || isbn.trim()) {
-      const boxW = Math.max(220, dims.trimW * 0.28);
-      const boxH = Math.max(90, dims.trimH * 0.09);
-      const bx = backX + pad;
-      const by = panelY + dims.trimH - pad - boxH;
-      ctx.fillStyle = "#fffdf4";
-      ctx.fillRect(bx, by, boxW, boxH);
-      ctx.fillStyle = "#111922";
-      const barCount = Math.max(24, isbnDigits.length * 2);
-      for (let i = 0; i < barCount; i++) {
-        const wide = (isbnDigits.charCodeAt(i % Math.max(isbnDigits.length, 1)) || 48) % 3 === 0;
-        ctx.fillRect(bx + 10 + i * ((boxW - 20) / barCount), by + 10, wide ? 3 : 1.5, boxH * 0.58);
-      }
-      ctx.font = `600 ${Math.max(14, Math.round(boxH * 0.16))}px Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(isbn.trim() || isbnDigits, bx + boxW / 2, by + boxH - 10);
-      ctx.textAlign = "start";
-    }
+    // Generated artwork carries its own typography and barcode; canvas copy is only the
+    // pre-generation placeholder.
+    if (!artwork) drawPlaceholderCopy(ctx, dims, { title, author, blurb, reviews, isbn });
 
     extendBleed(canvas, ctx, dims.bleed, dims.trimW * 2 + dims.spineW, dims.trimH);
     return canvas;

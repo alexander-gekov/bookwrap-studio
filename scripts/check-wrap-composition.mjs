@@ -8,8 +8,7 @@ const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8")
 // stretch-fills that output onto the trim, pastes the original front, and adds only the barcode.
 assert.match(route, /BACK COVER = left \$\{pct\(width\)\}, SPINE = middle \$\{pct\(spine\)\}, FRONT COVER = right \$\{pct\(width\)\}/);
 assert.match(route, /SAME typeface, weight, letter-spacing, and colour treatment as the front cover title/);
-assert.match(route, /completely empty for a barcode/);
-assert.match(route, /no barcode, no price/);
+assert.match(route, /draw a standard vertical-bar retail barcode with the number "\$\{barcode\}"/);
 assert.doesNotMatch(route, /Physical sizes|Set this synopsis|Add an ISBN barcode|ARTWORK ONLY/);
 assert.doesNotMatch(page, /drawPanelSlice/);
 assert.match(page, /if \(artwork\) ctx\.drawImage\(artwork, backX, panelY, dims\.trimW \* 2 \+ dims\.spineW, dims\.trimH\)/);
