@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   BookOpen,
   Check,
-  ChevronDown,
   Download,
   Eye,
   EyeOff,
@@ -36,13 +35,6 @@ declare global {
 }
 
 const defaults: CoverConfig = { width: 6, height: 9, spine: 0.54, bleed: 0.125, dpi: 300, unit: "in" };
-const defaultReviews =
-  `"A cartographer of impossible places." — The Atlantic\n"Quietly devastating and beautifully made." — Kirkus Reviews`;
-const examples = [
-  { src: "/examples/cover-ocean.svg", title: "Tidal Chart", note: "Cinematic seascape" },
-  { src: "/examples/cover-forest.svg", title: "North of Pine", note: "Muted woodland" },
-  { src: "/examples/cover-noir.svg", title: "Glass Meridian", note: "Minimal noir" },
-] as const;
 
 const toInches = (value: number, unit: Unit) => (unit === "in" ? value : value / 25.4);
 const toPx = (value: number, config: CoverConfig) => Math.round(toInches(value, config.unit) * config.dpi);
@@ -127,16 +119,12 @@ export default function Home() {
   const [coverUrl, setCoverUrl] = useState("");
   const [coverRatio, setCoverRatio] = useState(6 / 9);
   const [generatedUrl, setGeneratedUrl] = useState("");
-  const [title, setTitle] = useState("The Last Meridian");
-  const [author, setAuthor] = useState("Elena Vale");
-  const [blurb, setBlurb] = useState(
-    "A cartographer finds a coastline that should not exist—and a route that may rewrite everything she knows about home.",
-  );
-  const [reviews, setReviews] = useState(defaultReviews);
-  const [isbn, setIsbn] = useState("978-1-394-22180-4");
-  const [direction, setDirection] = useState(
-    "Continue the visual world naturally onto the spine and back. Match colors and lighting at the front edge so the wrap feels seamless.",
-  );
+  const [title, setTitle] = useState("");
+  const [author, setAuthor] = useState("");
+  const [blurb, setBlurb] = useState("");
+  const [reviews, setReviews] = useState("");
+  const [isbn, setIsbn] = useState("");
+  const [direction, setDirection] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState<ImageModel>(IMAGE_MODELS[0]);
   const [showKey, setShowKey] = useState(false);
@@ -255,7 +243,7 @@ export default function Home() {
     }
     if (!apiKey.trim()) {
       setStatus("error");
-      setError(`Add your ${selectedModel.providerLabel} API key to generate.`);
+      setError("Add your OpenRouter API key to generate.");
       return;
     }
 
@@ -273,6 +261,7 @@ export default function Home() {
     form.append("isbn", isbn);
     form.append("apiKey", apiKey.trim());
     form.append("model", selectedModel.id);
+    form.append("supportedParameters", selectedModel.supportedParameters.join(","));
     form.append("width", String(config.width));
     form.append("height", String(config.height));
     form.append("spine", String(config.spine));
@@ -489,6 +478,14 @@ export default function Home() {
     setCoverUrl("");
     setCoverRatio(6 / 9);
     setGeneratedUrl("");
+    setTitle("");
+    setAuthor("");
+    setBlurb("");
+    setReviews("");
+    setIsbn("");
+    setDirection("");
+    setApiKey("");
+    setSelectedModel(IMAGE_MODELS[0]);
     setStatus("idle");
     setStatusMessage("");
     setError("");
@@ -565,9 +562,20 @@ export default function Home() {
             {ready && <Check className="file-check" />}
           </div>
 
+          <div className="model-field">
+            <Label>Image model</Label>
+            <ModelPicker
+              value={selectedModel}
+              onChange={(model) => {
+                setSelectedModel(model);
+                setError("");
+              }}
+            />
+          </div>
+
           <div className="field-stack api-key-field">
             <Label htmlFor="api-key">
-              <KeyRound /> {selectedModel.providerLabel} API key
+              <KeyRound /> OpenRouter API key
             </Label>
             <div className="secret-input">
               <Input
@@ -575,7 +583,8 @@ export default function Home() {
                 type={showKey ? "text" : "password"}
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
-                placeholder={selectedModel.provider === "openrouter" ? "sk-or-v1-…" : "sk-…"}
+                placeholder="sk-or-v1-…"
+                maxLength={512}
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -628,7 +637,7 @@ export default function Home() {
 
             <TabsContent value="simple" className="options-panel">
               <p className="simple-note">
-                Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Open Advanced for spine, bleed, copy, and model.
+                Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Open Advanced for spine, bleed, and optional cover copy.
               </p>
             </TabsContent>
 
@@ -670,41 +679,29 @@ export default function Home() {
               <div className="copy-grid">
                 <div className="field-stack">
                   <Label>Book title</Label>
-                  <Input value={title} onChange={(event) => setTitle(event.target.value)} />
+                  <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Optional" />
                 </div>
                 <div className="field-stack">
                   <Label>Author</Label>
-                  <Input value={author} onChange={(event) => setAuthor(event.target.value)} />
+                  <Input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="Optional" />
                 </div>
                 <div className="field-stack full">
                   <Label>Back-cover copy</Label>
-                  <Textarea value={blurb} onChange={(event) => setBlurb(event.target.value)} rows={3} />
+                  <Textarea value={blurb} onChange={(event) => setBlurb(event.target.value)} rows={3} placeholder="Optional" />
                 </div>
                 <div className="field-stack full">
                   <Label>Reviews</Label>
-                  <Textarea value={reviews} onChange={(event) => setReviews(event.target.value)} rows={3} />
+                  <Textarea value={reviews} onChange={(event) => setReviews(event.target.value)} rows={3} placeholder="Optional" />
                   <small className="field-hint">One quote per line, ending with — Attribution</small>
                 </div>
                 <div className="field-stack">
                   <Label>ISBN</Label>
-                  <Input value={isbn} onChange={(event) => setIsbn(event.target.value)} />
+                  <Input value={isbn} onChange={(event) => setIsbn(event.target.value)} placeholder="Optional" />
                 </div>
                 <div className="field-stack full">
                   <Label>Art direction</Label>
-                  <Textarea value={direction} onChange={(event) => setDirection(event.target.value)} rows={3} />
+                  <Textarea value={direction} onChange={(event) => setDirection(event.target.value)} rows={3} placeholder="Optional" />
                 </div>
-              </div>
-
-              <div className="advanced-model">
-                <Label>Image model</Label>
-                <ModelPicker
-                  value={selectedModel}
-                  onChange={(model) => {
-                    setSelectedModel(model);
-                    setApiKey("");
-                    setError("");
-                  }}
-                />
               </div>
             </TabsContent>
           </Tabs>
@@ -727,6 +724,39 @@ export default function Home() {
           </div>
 
           <div className="stage">
+            <div className="book-preview" aria-label="3D book preview">
+              <motion.div
+                className="book-3d"
+                style={{ aspectRatio: coverRatio }}
+                initial={{ opacity: 0, rotateX: 4, rotateY: -18, y: 8 }}
+                animate={{ opacity: 1, rotateX: 4, rotateY: -28, y: 0 }}
+                transition={{ duration: 0.45 }}
+              >
+                <div
+                  className="book-3d-back"
+                  style={generatedUrl ? { backgroundImage: `url(${generatedUrl})` } : undefined}
+                />
+                <div className="book-3d-pages" />
+                <div
+                  className="book-3d-spine"
+                  style={generatedUrl ? { backgroundImage: `url(${generatedUrl})` } : undefined}
+                >
+                  {title && <span>{title}</span>}
+                </div>
+                <div className="book-3d-front">
+                  {coverUrl ? <img src={coverUrl} alt="Front cover on a 3D book" /> : <ImagePlus />}
+                </div>
+              </motion.div>
+              <p className="book-preview-caption">
+                {isBusy(status)
+                  ? statusMessage || "Generating your wrap…"
+                  : generatedUrl
+                    ? "Generated wrap on a 3D book"
+                    : coverUrl
+                      ? "Front cover ready to extend"
+                      : "Upload a front cover to preview the book"}
+              </p>
+            </div>
             <div className="stage-labels">
               <span>BACK</span>
               <span>SPINE</span>
@@ -754,14 +784,16 @@ export default function Home() {
                         </blockquote>
                       ))}
                     </div>
-                    <div className="barcode">
-                      <span />
-                      <span />
-                      <span />
-                      <span />
-                      <span />
-                      <small>{isbn || "ISBN"}</small>
-                    </div>
+                    {isbn && (
+                      <div className="barcode">
+                        <span />
+                        <span />
+                        <span />
+                        <span />
+                        <span />
+                        <small>{isbn}</small>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="empty-copy">
@@ -811,45 +843,6 @@ export default function Home() {
             </div>
           </div>
         </section>
-      </section>
-
-      <section className="examples">
-        <div className="examples-header">
-          <h2>Example fronts</h2>
-          <p>Try the flow with a sample, or drop in your own cover.</p>
-        </div>
-        <div className="examples-grid">
-          {examples.map((example, index) => (
-            <motion.button
-              key={example.src}
-              type="button"
-              className="example-card"
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.3, delay: index * 0.05 }}
-              whileHover={{ y: -4 }}
-              onClick={async () => {
-                const response = await fetch(example.src);
-                const blob = await response.blob();
-                const file = new File([blob], `${example.title.toLowerCase().replace(/\s+/g, "-")}.svg`, {
-                  type: blob.type || "image/svg+xml",
-                });
-                await acceptFile(file);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            >
-              <img src={example.src} alt={`${example.title} sample cover`} />
-              <div>
-                <strong>{example.title}</strong>
-                <span>{example.note}</span>
-              </div>
-              <em>
-                Use sample <ChevronDown />
-              </em>
-            </motion.button>
-          ))}
-        </div>
       </section>
 
       <canvas ref={canvasRef} hidden />
