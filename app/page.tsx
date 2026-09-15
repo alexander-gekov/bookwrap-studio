@@ -117,6 +117,72 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: nu
   ctx.drawImage(image, (image.width - sw) / 2, (image.height - sh) / 2, sw, sh, x, y, w, h);
 }
 
+type Dims = { trimW: number; trimH: number; spineW: number; bleed: number; totalW: number; totalH: number };
+
+function drawPlaceholderCopy(
+  ctx: CanvasRenderingContext2D,
+  dims: Dims,
+  copy: { title: string; author: string; blurb: string; reviews: string },
+) {
+  const backX = dims.bleed;
+  const spineX = dims.bleed + dims.trimW;
+  const panelY = dims.bleed;
+  const pad = Math.max(48, dims.trimW * 0.1);
+  const maxCopy = dims.trimW - pad * 2;
+  let y = panelY + pad;
+
+  ctx.fillStyle = "rgba(7,13,20,.42)";
+  ctx.fillRect(backX, panelY, dims.trimW, dims.trimH);
+  ctx.fillStyle = "rgba(7,13,20,.18)";
+  ctx.fillRect(spineX, panelY, dims.spineW, dims.trimH);
+  ctx.fillStyle = "#fffdf4";
+  ctx.textBaseline = "top";
+
+  if (copy.blurb.trim()) {
+    const fontSize = Math.max(28, Math.round(dims.trimW * 0.038));
+    ctx.font = `500 ${fontSize}px Georgia, serif`;
+    wrapLines(ctx, copy.blurb.trim(), maxCopy, 7).forEach((text) => {
+      ctx.fillText(text, backX + pad, y);
+      y += fontSize * 1.42;
+    });
+    y += fontSize * 0.8;
+  }
+
+  parseReviews(copy.reviews).forEach((review) => {
+    const quoteSize = Math.max(24, Math.round(dims.trimW * 0.032));
+    ctx.font = `italic 500 ${quoteSize}px Georgia, serif`;
+    wrapLines(ctx, `“${review.quote}”`, maxCopy, 3).forEach((text) => {
+      ctx.fillText(text, backX + pad, y);
+      y += quoteSize * 1.38;
+    });
+    if (review.attribution) {
+      ctx.font = `700 ${Math.max(16, Math.round(dims.trimW * 0.02))}px Arial`;
+      ctx.fillText(review.attribution.toUpperCase(), backX + pad, y + 6);
+      y += quoteSize * 1.7;
+    } else {
+      y += quoteSize * 0.6;
+    }
+  });
+
+  if (dims.spineW > 28) {
+    ctx.save();
+    ctx.translate(spineX + dims.spineW / 2, dims.totalH / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,.45)";
+    ctx.shadowBlur = Math.max(6, dims.spineW * 0.08);
+    const titleSize = Math.round(Math.min(dims.spineW * 0.72, dims.trimH * 0.055));
+    ctx.font = `800 ${titleSize}px Arial`;
+    ctx.fillText(copy.title.toUpperCase(), 0, copy.author ? -titleSize * 0.28 : 0, dims.trimH * 0.86);
+    if (copy.author) {
+      ctx.font = `600 ${Math.round(titleSize * 0.42)}px Arial`;
+      ctx.fillText(copy.author.toUpperCase(), 0, titleSize * 0.42, dims.trimH * 0.7);
+    }
+    ctx.restore();
+  }
+}
+
 function extendBleed(
   canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
@@ -355,62 +421,22 @@ export default function Home() {
     const front = await loadImage(coverUrl);
     const artwork = generatedUrl ? await loadImage(generatedUrl) : null;
     const backX = dims.bleed;
-    const spineX = dims.bleed + dims.trimW;
     const frontX = dims.bleed + dims.trimW + dims.spineW;
     const panelY = dims.bleed;
 
     ctx.fillStyle = "#111922";
     ctx.fillRect(0, 0, dims.totalW, dims.totalH);
 
-    if (artwork) {
-      drawCover(ctx, artwork, backX, panelY, dims.trimW * 2 + dims.spineW, dims.trimH);
-    }
+    // The model lays out back | spine | front at exact width shares, so stretch-fill
+    // (not cover-crop) keeps those panels aligned with the trim geometry.
+    if (artwork) ctx.drawImage(artwork, backX, panelY, dims.trimW * 2 + dims.spineW, dims.trimH);
 
     drawCover(ctx, front, frontX, panelY, dims.trimW, dims.trimH);
 
-    if (!artwork) {
-      ctx.fillStyle = "rgba(7,13,20,.42)";
-      ctx.fillRect(backX, panelY, dims.trimW, dims.trimH);
-      ctx.fillStyle = "rgba(7,13,20,.18)";
-      ctx.fillRect(spineX, panelY, dims.spineW, dims.trimH);
-    } else {
-      ctx.fillStyle = "rgba(7,13,20,.28)";
-      ctx.fillRect(backX, panelY, dims.trimW, dims.trimH);
-      ctx.fillStyle = "rgba(7,13,20,.16)";
-      ctx.fillRect(spineX, panelY, dims.spineW, dims.trimH);
-    }
-
     const pad = Math.max(48, dims.trimW * 0.1);
-    const maxCopy = dims.trimW - pad * 2;
-    let y = panelY + pad;
-    ctx.fillStyle = "#fffdf4";
-    ctx.textBaseline = "top";
 
-    if (blurb.trim()) {
-      const fontSize = Math.max(28, Math.round(dims.trimW * 0.038));
-      ctx.font = `500 ${fontSize}px Georgia, serif`;
-      wrapLines(ctx, blurb.trim(), maxCopy, 7).forEach((text) => {
-        ctx.fillText(text, backX + pad, y);
-        y += fontSize * 1.42;
-      });
-      y += fontSize * 0.8;
-    }
-
-    parseReviews(reviews).forEach((review) => {
-      const quoteSize = Math.max(24, Math.round(dims.trimW * 0.032));
-      ctx.font = `italic 500 ${quoteSize}px Georgia, serif`;
-      wrapLines(ctx, `“${review.quote}”`, maxCopy, 3).forEach((text) => {
-        ctx.fillText(text, backX + pad, y);
-        y += quoteSize * 1.38;
-      });
-      if (review.attribution) {
-        ctx.font = `700 ${Math.max(16, Math.round(dims.trimW * 0.02))}px Arial`;
-        ctx.fillText(review.attribution.toUpperCase(), backX + pad, y + 6);
-        y += quoteSize * 1.7;
-      } else {
-        y += quoteSize * 0.6;
-      }
-    });
+    // Generated artwork carries its own typography; canvas text is only the pre-generation placeholder.
+    if (!artwork) drawPlaceholderCopy(ctx, dims, { title, author, blurb, reviews });
 
     const isbnDigits = isbn.replace(/[^\dX]/gi, "");
     if (isbnDigits || isbn.trim()) {
@@ -433,28 +459,35 @@ export default function Home() {
       ctx.textAlign = "start";
     }
 
-    if (dims.spineW > 28) {
-      ctx.save();
-      ctx.translate(spineX + dims.spineW / 2, dims.totalH / 2);
-      ctx.rotate(Math.PI / 2);
-      ctx.fillStyle = "#fffdf4";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.shadowColor = "rgba(0,0,0,.45)";
-      ctx.shadowBlur = Math.max(6, dims.spineW * 0.08);
-      const titleSize = Math.round(Math.min(dims.spineW * 0.72, dims.trimH * 0.055));
-      ctx.font = `800 ${titleSize}px Arial`;
-      ctx.fillText(title.toUpperCase(), 0, author ? -titleSize * 0.28 : 0, dims.trimH * 0.86);
-      if (author) {
-        ctx.font = `600 ${Math.round(titleSize * 0.42)}px Arial`;
-        ctx.fillText(author.toUpperCase(), 0, titleSize * 0.42, dims.trimH * 0.7);
-      }
-      ctx.restore();
-    }
-
     extendBleed(canvas, ctx, dims.bleed, dims.trimW * 2 + dims.spineW, dims.trimH);
     return canvas;
   }, [author, blurb, coverUrl, dims, generatedUrl, isbn, reviews, title]);
+
+  // Trim-only (no bleed) composite at preview resolution, so the 3D book shows the same
+  // wrap that downloads produce instead of the raw model output.
+  const [wrapPreviewUrl, setWrapPreviewUrl] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (!generatedUrl) {
+        setWrapPreviewUrl("");
+        return;
+      }
+      const source = await compose();
+      if (!source || cancelled) return;
+      const trimW = dims.trimW * 2 + dims.spineW;
+      const scale = Math.min(1, 2400 / trimW);
+      const preview = document.createElement("canvas");
+      preview.width = Math.round(trimW * scale);
+      preview.height = Math.round(dims.trimH * scale);
+      preview.getContext("2d")?.drawImage(source, dims.bleed, dims.bleed, trimW, dims.trimH, 0, 0, preview.width, preview.height);
+      if (!cancelled) setWrapPreviewUrl(preview.toDataURL("image/jpeg", 0.9));
+    }, 150);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [compose, dims, generatedUrl]);
 
   const download = async (part: "wrap" | "front" | "spine" | "back") => {
     const source = await compose();
@@ -864,7 +897,7 @@ export default function Home() {
               <motion.div className="three-preview" initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
                 <BookPreview3D
                   frontUrl={coverUrl}
-                  wrapUrl={generatedUrl}
+                  wrapUrl={wrapPreviewUrl}
                   trimWidth={config.width}
                   trimHeight={config.height}
                   spineWidth={config.spine}

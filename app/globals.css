@@ -440,10 +440,10 @@ html, body { overflow-x: hidden; }
   padding: 8% 8%; color: #fffdf6;
 }
 .cover-spread.has-art .back-panel,
-.cover-spread.has-art .spine-panel { background: transparent; }
-.cover-spread.has-art .back-panel {
-  background: linear-gradient(180deg, rgba(8, 14, 21, 0.38), rgba(8, 14, 21, 0.48));
-}
+.cover-spread.has-art .spine-panel { background: transparent; box-shadow: none; }
+.cover-spread.has-art .back-copy,
+.cover-spread.has-art .back-reviews,
+.cover-spread.has-art .spine-copy { display: none; }
 .back-copy {
   margin: 0; max-width: 92%;
   font: 500 clamp(10px, 1.2vw, 16px) / 1.45 Georgia, serif;

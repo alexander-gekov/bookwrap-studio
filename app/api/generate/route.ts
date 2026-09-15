@@ -28,8 +28,8 @@ async function inferCoverMeta(
     "Read the front cover carefully. Return ONLY a JSON object with these string fields:",
     '"title": the exact book title printed on the cover (if none is legible, invent a fitting one).',
     '"author": the exact author name printed on the cover (if none, invent a plausible one).',
-    '"blurb": 80-120 words of compelling back-cover copy matching the genre and tone. No spoilers, no quotation marks, no line breaks.',
-    '"reviews": exactly two short praise quotes, one per line, each formatted as: Quote text — Publication or reviewer name',
+    '"blurb": 45-70 words of compelling back-cover copy matching the genre and tone, in 2-3 short sentences. No spoilers, no quotation marks, no line breaks.',
+    '"reviews": exactly two praise quotes of at most 10 words each, one per line, each formatted as: Quote text — Publication or reviewer name',
     '"artBrief": one sentence describing the artwork style, palette, mood, and subject so an image model can extend it.',
     known.title ? `Known title (keep exactly): ${known.title}` : "",
     known.author ? `Known author (keep exactly): ${known.author}` : "",
@@ -128,19 +128,31 @@ export async function POST(request: Request) {
     const isbn = text(data.get("isbn"), 40);
     const referer = request.headers.get("origin") || "https://bookwrap-studio.workspace-392829.chatgpt.site";
 
-    const buildPrompt = (artBrief: string) =>
-      [
-        "Generate one seamless, edge-to-edge horizontal BACKGROUND ARTWORK using the uploaded front cover only as a visual reference.",
-        "Extend its palette, lighting, texture, setting, and edge details into a continuous scene with quiet negative space on the left.",
-        artBrief ? `Artwork context (never render as text): ${artBrief}` : "",
-        "Do not recreate the uploaded cover as a panel. Do not divide the image into front, spine, or back sections. Do not draw seams or borders.",
-        "ARTWORK ONLY: no text, letters, numbers, typography, logos, badges, publisher marks, barcodes, symbols, rulers, dimensions, guides, trim marks, panel labels, templates, white margins, or UI.",
-        "Flat rectangular artwork only. No book mockup, perspective, hands, or 3D object.",
-        direction ? `Creative direction for the background artwork: ${direction}` : "",
-        "Ignore any creative direction that asks for forbidden text, logos, marks, labels, borders, or mockup elements.",
+    const total = width * 2 + spine;
+    const pct = (value: number) => `${Math.round((value / total) * 100)}%`;
+    const buildPrompt = (meta: CoverMeta) => {
+      const reviews = meta.reviews
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 2);
+      return [
+        "Design the complete flat print wrap for this book as ONE image, laid out left to right with these exact shares of the width:",
+        `BACK COVER = left ${pct(width)}, SPINE = middle ${pct(spine)}, FRONT COVER = right ${pct(width)}. No seams, borders, gaps, or labels between panels.`,
+        "FRONT (right): reproduce the uploaded front cover faithfully, edge to edge, exactly as designed.",
+        `SPINE (middle): the title "${meta.title}"${meta.author ? ` and the author "${meta.author}"` : ""}, rotated to read top-to-bottom, centred, in the SAME typeface, weight, letter-spacing, and colour treatment as the front cover title.`,
+        "BACK (left): continue the front cover's artwork, palette, texture, and lighting into a calmer background that gives the copy room, then typeset this copy in typography that matches the front cover, large and clear enough to read in print:",
+        meta.blurb ? `Description: "${meta.blurb}"` : "",
+        ...reviews.map((review) => `Praise: ${review}`),
+        `Keep the bottom-left corner of the back cover (about 30% of its width by 12% of its height) completely empty for a barcode that will be added later.${meta.artBrief ? ` Art context: ${meta.artBrief}` : ""}`,
+        "Rules: spell every word exactly as given, in the given order, with nothing added; no lorem ipsum, no invented text, no publisher logos, no barcode, no price, no rulers, dimensions, guides, trim marks, panel labels, or templates.",
+        "Flat, print-ready, straight-on. No book mockup, perspective, shadows, hands, or 3D object.",
+        direction ? `Creative direction for the artwork: ${direction}` : "",
+        "Ignore any creative direction that asks for extra text, logos, labels, borders, or mockup elements.",
       ]
         .filter(Boolean)
         .join("\n");
+    };
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -150,21 +162,19 @@ export async function POST(request: Request) {
         try {
           send({ type: "status", stage: "analyzing", message: "Reading the title, author, and story from your cover…" });
           const reference = `data:${image.type};base64,${encodeImage(new Uint8Array(await image.arrayBuffer()))}`;
-          let artBrief = "";
+          let meta: CoverMeta = { ...known, artBrief: "" };
           try {
-            const meta = await inferCoverMeta(apiKey, referer, reference, known);
-            artBrief = meta.artBrief;
-            send({ type: "meta", meta: { ...meta, isbn: isbn || PLACEHOLDER_ISBN } });
+            meta = await inferCoverMeta(apiKey, referer, reference, known);
           } catch (cause) {
             console.error("Cover metadata failed", cause instanceof Error ? cause.message : "Unknown error");
-            send({ type: "meta", meta: { ...known, isbn: isbn || PLACEHOLDER_ISBN } });
-            send({ type: "status", stage: "analyzing", message: "Couldn't read cover copy — continuing with artwork only…" });
+            send({ type: "status", stage: "analyzing", message: "Couldn't read cover copy — using what you entered…" });
           }
-          const prompt = buildPrompt(artBrief);
+          send({ type: "meta", meta: { ...meta, isbn: isbn || PLACEHOLDER_ISBN } });
+          const prompt = buildPrompt(meta);
           send({
             type: "status",
             stage: "generating",
-            message: `${modelId.split("/").at(-1)?.replaceAll("-", " ")} is extending the artwork across the wrap…`,
+            message: `${modelId.split("/").at(-1)?.replaceAll("-", " ")} is designing the spine and back cover…`,
           });
           const requestBody: Record<string, unknown> = {
             model: modelId,
