@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import {
   BookOpen,
   Check,
@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { BookPreview3D } from "@/components/book-preview-3d";
 import { IMAGE_MODELS, ModelPicker, type ImageModel } from "@/components/model-picker";
 
@@ -40,6 +41,25 @@ const defaults: CoverConfig = { width: 6, height: 9, spine: 0.54, bleed: 0.125, 
 const toInches = (value: number, unit: Unit) => (unit === "in" ? value : value / 25.4);
 const toPx = (value: number, config: CoverConfig) => Math.round(toInches(value, config.unit) * config.dpi);
 const isBusy = (status: JobStatus) => ["queued", "analyzing", "generating", "compositing"].includes(status);
+
+const spring = { type: "spring", stiffness: 420, damping: 34, mass: 0.8 } as const;
+const fadeUp = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+  transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
+};
+
+function Hint({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent className="hint-tip" sideOffset={6}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function parseReviews(text: string) {
   return text
@@ -133,6 +153,7 @@ export default function Home() {
   const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState("");
   const [panel, setPanel] = useState("simple");
+  const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -467,7 +488,17 @@ export default function Home() {
     setError("");
   };
 
+  const activeStep = canDownload ? 3 : ready ? 2 : 1;
+  const steps = [
+    { n: 1, label: "Upload", done: ready },
+    { n: 2, label: "Generate", done: canDownload },
+    { n: 3, label: "Download", done: false },
+  ];
+  const generateLabel = isBusy(status) ? statusMessage || "Generating…" : "Generate wrap";
+
   return (
+    <MotionConfig reducedMotion="user" transition={spring}>
+    <TooltipProvider delayDuration={350}>
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
@@ -480,41 +511,49 @@ export default function Home() {
           </div>
         </div>
         <nav className="step-nav" aria-label="Workflow">
-          <span className={ready ? "done" : "active"}>
-            <em>1</em>
-            <span>Upload</span>
-          </span>
-          <span className={canDownload ? "done" : isBusy(status) ? "active" : ""}>
-            <em>2</em>
-            <span>Generate</span>
-          </span>
-          <span className={canDownload ? "active" : ""}>
-            <em>3</em>
-            <span>Download</span>
-          </span>
+          {steps.map((step) => {
+            const active = step.n === activeStep;
+            return (
+              <span key={step.n} className={active ? "active" : step.done ? "done" : ""} aria-current={active ? "step" : undefined}>
+                {active && <motion.span className="step-pill" layoutId="step-pill" transition={spring} />}
+                <em>{step.done && !active ? <Check /> : step.n}</em>
+                <span>{step.label}</span>
+              </span>
+            );
+          })}
         </nav>
-        <button className="text-btn" type="button" onClick={reset}>
-          Reset
-        </button>
+        <Hint label="Clear the upload, wrap, and settings">
+          <motion.button className="text-btn" type="button" onClick={reset} whileTap={{ scale: 0.95 }}>
+            Reset
+          </motion.button>
+        </Hint>
       </header>
 
       <section className="hero">
-        <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+        <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
           Turn a front cover into a full wrap.
         </motion.h1>
-        <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.05 }}>
+        <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}>
           Upload your finished front. Generate a matching spine and back at the same proportions. Download print-ready PNGs.
         </motion.p>
       </section>
 
-      <section className="workspace">
+      <motion.section
+        className="workspace"
+        initial={{ opacity: 0, y: 28 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+      >
         <aside className="control-panel">
-          <div
-            className={`dropzone ${ready ? "has-file" : ""}`}
+          <motion.div
+            className={`dropzone ${ready ? "has-file" : ""} ${dragging ? "dragging" : ""}`}
             onClick={() => fileInput.current?.click()}
             onDragOver={(event) => event.preventDefault()}
+            onDragEnter={() => setDragging(true)}
+            onDragLeave={() => setDragging(false)}
             onDrop={(event) => {
               event.preventDefault();
+              setDragging(false);
               void acceptFile(event.dataTransfer.files[0]);
             }}
             role="button"
@@ -522,6 +561,9 @@ export default function Home() {
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") fileInput.current?.click();
             }}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.985 }}
+            animate={{ scale: dragging ? 1.015 : 1 }}
           >
             <input
               ref={fileInput}
@@ -530,13 +572,50 @@ export default function Home() {
               hidden
               onChange={(event) => void acceptFile(event.target.files?.[0])}
             />
-            {coverUrl ? <img src={coverUrl} alt="Uploaded front cover" /> : <div className="upload-icon"><Upload /></div>}
+            <AnimatePresence mode="popLayout" initial={false}>
+              {coverUrl ? (
+                <motion.img
+                  key={coverUrl}
+                  src={coverUrl}
+                  alt="Uploaded front cover"
+                  initial={{ opacity: 0, scale: 0.8, rotate: -4 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                />
+              ) : (
+                <motion.div
+                  key="icon"
+                  className="upload-icon"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                >
+                  <motion.span animate={dragging ? { y: [0, -3, 0] } : { y: 0 }} transition={dragging ? { repeat: Infinity, duration: 0.9 } : spring}>
+                    <Upload />
+                  </motion.span>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <div>
-              <strong>{coverFile?.name || "Drop your front cover"}</strong>
+              <strong>{dragging ? "Release to upload" : coverFile?.name || "Drop your front cover"}</strong>
               <span>{coverFile ? "Click to replace · proportions locked to this image" : "PNG, JPG, or WebP · max 15 MB"}</span>
             </div>
-            {ready && <Check className="file-check" />}
-          </div>
+            <AnimatePresence>
+              {ready && (
+                <Hint label="Trim proportions locked to this image">
+                  <motion.span
+                    className="file-check"
+                    initial={{ scale: 0, rotate: -30 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    exit={{ scale: 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 22 }}
+                  >
+                    <Check />
+                  </motion.span>
+                </Hint>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           <div className="model-field">
             <Label>Image model</Label>
@@ -564,43 +643,85 @@ export default function Home() {
                 autoComplete="off"
                 spellCheck={false}
               />
-              <button type="button" aria-label={showKey ? "Hide API key" : "Show API key"} onClick={() => setShowKey((value) => !value)}>
-                {showKey ? <EyeOff /> : <Eye />}
-              </button>
+              <Hint label={showKey ? "Hide key" : "Show key"}>
+                <motion.button
+                  type="button"
+                  aria-label={showKey ? "Hide API key" : "Show API key"}
+                  onClick={() => setShowKey((value) => !value)}
+                  whileTap={{ scale: 0.88 }}
+                >
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={showKey ? "off" : "on"}
+                      initial={{ opacity: 0, scale: 0.6 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.6 }}
+                      transition={{ duration: 0.14 }}
+                    >
+                      {showKey ? <EyeOff /> : <Eye />}
+                    </motion.span>
+                  </AnimatePresence>
+                </motion.button>
+              </Hint>
             </div>
           </div>
 
-          {error && (
-            <div className="error-message" role="alert">
-              {error}
-            </div>
-          )}
+          <AnimatePresence initial={false}>
+            {error && (
+              <motion.div
+                className="error-message"
+                role="alert"
+                initial={{ opacity: 0, height: 0, marginTop: -16 }}
+                animate={{ opacity: 1, height: "auto", marginTop: 0 }}
+                exit={{ opacity: 0, height: 0, marginTop: -16 }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <motion.div initial={{ x: 0 }} animate={{ x: [0, -4, 4, -2, 0] }} transition={{ duration: 0.35, delay: 0.1 }}>
+                  {error}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <Button className="generate-button" onClick={() => void generate()} disabled={isBusy(status)}>
-            {isBusy(status) ? <LoaderCircle className="spin" /> : <Sparkles />}
-            {isBusy(status) ? statusMessage || "Generating…" : "Generate wrap"}
-          </Button>
+          <motion.div whileTap={isBusy(status) ? undefined : { scale: 0.98 }}>
+            <Button className="generate-button" onClick={() => void generate()} disabled={isBusy(status)}>
+              {isBusy(status) ? <LoaderCircle className="spin" /> : <Sparkles />}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span key={generateLabel} className="generate-label" {...fadeUp} transition={{ duration: 0.2 }}>
+                  {generateLabel}
+                </motion.span>
+              </AnimatePresence>
+            </Button>
+          </motion.div>
 
           <AnimatePresence>
             {canDownload && (
               <motion.div
                 className="download-row"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
+                initial="hidden"
+                animate="show"
+                exit="hidden"
+                variants={{
+                  hidden: { opacity: 0, height: 0 },
+                  show: { opacity: 1, height: "auto", transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+                }}
               >
-                <Button variant="outline" onClick={() => void download("back")}>
-                  <Download /> Back
-                </Button>
-                <Button variant="outline" onClick={() => void download("spine")}>
-                  <Download /> Spine
-                </Button>
-                <Button variant="outline" onClick={() => void download("front")}>
-                  <Download /> Front
-                </Button>
-                <Button className="download-wrap" onClick={() => void download("wrap")}>
-                  <Download /> Full wrap
-                </Button>
+                {(["back", "spine", "front"] as const).map((part) => (
+                  <motion.div key={part} variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} whileTap={{ scale: 0.96 }}>
+                    <Hint label={`Download the ${part} panel PNG with bleed`}>
+                      <Button variant="outline" onClick={() => void download(part)}>
+                        <Download /> {part[0].toUpperCase() + part.slice(1)}
+                      </Button>
+                    </Hint>
+                  </motion.div>
+                ))}
+                <motion.div className="download-wrap-slot" variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} whileTap={{ scale: 0.985 }}>
+                  <Hint label={`Full ${dims.totalW.toLocaleString()} × ${dims.totalH.toLocaleString()} px print spread`}>
+                    <Button className="download-wrap" onClick={() => void download("wrap")}>
+                      <Download /> Full wrap
+                    </Button>
+                  </Hint>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -611,13 +732,16 @@ export default function Home() {
               <TabsTrigger value="advanced">Advanced</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="simple" className="options-panel">
-              <p className="simple-note">
-                Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Open Advanced for spine, bleed, and optional cover copy.
-              </p>
+            <TabsContent value="simple" className="options-panel" asChild>
+              <motion.div {...fadeUp}>
+                <p className="simple-note">
+                  Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Open Advanced for spine, bleed, and optional cover copy.
+                </p>
+              </motion.div>
             </TabsContent>
 
-            <TabsContent value="advanced" className="options-panel advanced-panel">
+            <TabsContent value="advanced" className="options-panel advanced-panel" asChild>
+              <motion.div {...fadeUp}>
               <div className="unit-row">
                 <Label>Units</Label>
                 <Select value={config.unit} onValueChange={(value) => updateConfig("unit", value as Unit)}>
@@ -679,6 +803,7 @@ export default function Home() {
                   <Textarea value={direction} onChange={(event) => setDirection(event.target.value)} rows={3} placeholder="Optional" />
                 </div>
               </div>
+              </motion.div>
             </TabsContent>
           </Tabs>
         </aside>
@@ -689,14 +814,24 @@ export default function Home() {
               <p className="eyebrow">Live preview</p>
               <h2>Cover preview</h2>
             </div>
-            <div className="size-readout">
-              <span>
-                {totalDisplay.toFixed(3)} × {heightDisplay.toFixed(3)} {config.unit}
-              </span>
-              <strong>
-                {dims.totalW.toLocaleString()} × {dims.totalH.toLocaleString()} px
-              </strong>
-            </div>
+            <Hint label={`Back + spine + front with ${config.bleed} ${config.unit} bleed at ${config.dpi} DPI`}>
+              <div className="size-readout" tabIndex={0}>
+                <span>
+                  {totalDisplay.toFixed(3)} × {heightDisplay.toFixed(3)} {config.unit}
+                </span>
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.strong
+                    key={`${dims.totalW}x${dims.totalH}`}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {dims.totalW.toLocaleString()} × {dims.totalH.toLocaleString()} px
+                  </motion.strong>
+                </AnimatePresence>
+              </div>
+            </Hint>
           </div>
 
           <Tabs defaultValue="book" className="preview-tabs">
@@ -704,8 +839,8 @@ export default function Home() {
               <TabsTrigger value="book">3D book</TabsTrigger>
               <TabsTrigger value="spread">Print spread</TabsTrigger>
             </TabsList>
-            <TabsContent value="book" className="preview-tab-content">
-              <div className="three-preview">
+            <TabsContent value="book" className="preview-tab-content" asChild>
+              <motion.div className="three-preview" initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
                 <BookPreview3D
                   frontUrl={coverUrl}
                   wrapUrl={generatedUrl}
@@ -713,16 +848,27 @@ export default function Home() {
                   trimHeight={config.height}
                   spineWidth={config.spine}
                 />
-                {isBusy(status) && (
-                  <div className="three-job-status">
-                    <LoaderCircle />
-                    <span>{statusMessage || "Generating your wrap…"}</span>
-                  </div>
-                )}
-              </div>
+                <AnimatePresence>
+                  {isBusy(status) && (
+                    <motion.div
+                      className="three-job-status"
+                      initial={{ opacity: 0, y: -10, scale: 0.94 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.94 }}
+                    >
+                      <LoaderCircle />
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.span key={statusMessage} {...fadeUp} transition={{ duration: 0.2 }}>
+                          {statusMessage || "Generating your wrap…"}
+                        </motion.span>
+                      </AnimatePresence>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
             </TabsContent>
-            <TabsContent value="spread" className="preview-tab-content">
-              <div className="flat-preview">
+            <TabsContent value="spread" className="preview-tab-content" asChild>
+              <motion.div className="flat-preview" {...fadeUp}>
               <div className="stage-labels">
                 <span>BACK</span>
                 <span>SPINE</span>
@@ -795,13 +941,15 @@ export default function Home() {
                   </div>
                 </motion.div>
               </div>
-            </div>
+              </motion.div>
             </TabsContent>
           </Tabs>
         </section>
-      </section>
+      </motion.section>
 
       <canvas ref={canvasRef} hidden />
     </main>
+    </TooltipProvider>
+    </MotionConfig>
   );
 }

@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "motion/react";
 import { Check, ChevronDown, ChevronRight, ImageIcon, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -185,11 +186,19 @@ export function ModelPicker({ value, onChange }: { value: ImageModel; onChange: 
           </div>
           {visibleModels.map((model) => {
             const active = model.id === value.id;
-            return <button key={model.id} type="button" className={`model-option ${active ? "selected" : ""}`} onClick={() => { onChange(model); setOpen(false); }}>
+            return <motion.button
+              key={model.id}
+              type="button"
+              className={`model-option ${active ? "selected" : ""}`}
+              onClick={() => { onChange(model); setOpen(false); }}
+              whileTap={{ scale: 0.98 }}
+            >
               <ProviderLogo providerId={model.providerId} providerName={model.providerName} compact />
               <span className="model-option-copy"><strong>{model.name}</strong><small>{model.description}</small></span>
-              <span className="model-check">{active && <Check />}</span>
-            </button>;
+              <span className="model-check">
+                {active && <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 500, damping: 22 }}><Check /></motion.span>}
+              </span>
+            </motion.button>;
           })}
           {visibleModels.length === 0 && <p className="model-empty"><ImageIcon /> No matching image models.</p>}
         </div>
