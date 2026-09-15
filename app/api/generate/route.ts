@@ -62,10 +62,10 @@ export async function POST(request: Request) {
     const unit = data.get("unit") === "mm" ? "millimeters" : "inches";
     const aspectRatio = pickAspectRatio(width, height, spine);
     const panelRatio = Number.isFinite(aspect) && aspect > 0 ? aspect : width / Math.max(height, 0.01);
-    const supportedParameters = new Set(
-      String(data.get("supportedParameters") || "")
+    const supportedAspectRatios = new Set(
+      String(data.get("aspectRatios") || "")
         .split(",")
-        .filter((parameter) => ["aspect_ratio", "quality", "output_format", "n"].includes(parameter)),
+        .filter((value) => ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"].includes(value)),
     );
 
     const prompt = [
@@ -108,10 +108,7 @@ export async function POST(request: Request) {
             prompt,
             input_references: [{ type: "image_url", image_url: { url: reference } }],
           };
-          if (supportedParameters.has("aspect_ratio")) requestBody.aspect_ratio = aspectRatio;
-          if (supportedParameters.has("quality")) requestBody.quality = "high";
-          if (supportedParameters.has("output_format")) requestBody.output_format = "png";
-          if (supportedParameters.has("n")) requestBody.n = 1;
+          if (supportedAspectRatios.has(aspectRatio)) requestBody.aspect_ratio = aspectRatio;
 
           const response = await fetch("https://openrouter.ai/api/v1/images", {
             method: "POST",

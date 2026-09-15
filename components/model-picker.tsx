@@ -11,14 +11,14 @@ export type ImageModel = {
   description: string;
   badge: string;
   icon: "google" | "openai" | "router" | "seedream";
-  supportedParameters: string[];
+  aspectRatios: string[];
 };
 
 export const IMAGE_MODELS: ImageModel[] = [
-  { id: "google/gemini-3.1-flash-image", name: "Nano Banana 2", description: "Fast Gemini image generation and editing.", badge: "Gemini", icon: "google", supportedParameters: ["aspect_ratio", "input_references"] },
-  { id: "bytedance-seed/seedream-5-0-pro", name: "Seedream 5.0 Pro", description: "High-fidelity visual generation and editing.", badge: "Seedream", icon: "seedream", supportedParameters: ["aspect_ratio", "input_references"] },
-  { id: "openai/gpt-image-2.5-sunburst", name: "GPT Image 2.5 Sunburst", description: "Precision-oriented image generation and editing.", badge: "GPT Image", icon: "openai", supportedParameters: ["aspect_ratio", "quality", "input_references"] },
-  { id: "openai/gpt-image-2.5-flare", name: "GPT Image 2.5 Flare", description: "Fast image generation for quick iterations.", badge: "GPT Image", icon: "openai", supportedParameters: ["aspect_ratio", "quality", "input_references"] },
+  { id: "google/gemini-3.1-flash-image", name: "Nano Banana 2", description: "Fast Gemini image generation and editing.", badge: "Gemini", icon: "google", aspectRatios: ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"] },
+  { id: "bytedance-seed/seedream-5-0-pro", name: "Seedream 5.0 Pro", description: "High-fidelity visual generation and editing.", badge: "Seedream", icon: "seedream", aspectRatios: ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"] },
+  { id: "openai/gpt-image-2.5-sunburst", name: "GPT Image 2.5 Sunburst", description: "Precision-oriented image generation and editing.", badge: "GPT Image", icon: "openai", aspectRatios: ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"] },
+  { id: "openai/gpt-image-2.5-flare", name: "GPT Image 2.5 Flare", description: "Fast image generation for quick iterations.", badge: "GPT Image", icon: "openai", aspectRatios: ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"] },
 ];
 
 function parseModel(value: unknown): ImageModel | null {
@@ -35,8 +35,16 @@ function parseModel(value: unknown): ImageModel | null {
   const description = typeof model.description === "string" ? model.description : "Image generation and editing through OpenRouter.";
   const supportedParameters =
     model.supported_parameters && typeof model.supported_parameters === "object"
-      ? Object.keys(model.supported_parameters)
-      : [];
+      ? (model.supported_parameters as Record<string, unknown>)
+      : {};
+  const aspectRatio = supportedParameters.aspect_ratio;
+  const aspectRatioValues =
+    aspectRatio && typeof aspectRatio === "object"
+      ? (aspectRatio as Record<string, unknown>).values
+      : undefined;
+  const aspectRatios = Array.isArray(aspectRatioValues)
+    ? aspectRatioValues.filter((value): value is string => typeof value === "string")
+    : [];
   const icon = id.startsWith("google/")
     ? "google"
     : id.startsWith("openai/")
@@ -59,7 +67,7 @@ function parseModel(value: unknown): ImageModel | null {
     description,
     badge,
     icon,
-    supportedParameters,
+    aspectRatios,
   };
 }
 

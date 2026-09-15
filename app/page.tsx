@@ -261,7 +261,7 @@ export default function Home() {
     form.append("isbn", isbn);
     form.append("apiKey", apiKey.trim());
     form.append("model", selectedModel.id);
-    form.append("supportedParameters", selectedModel.supportedParameters.join(","));
+    form.append("aspectRatios", selectedModel.aspectRatios.join(","));
     form.append("width", String(config.width));
     form.append("height", String(config.height));
     form.append("spine", String(config.spine));
