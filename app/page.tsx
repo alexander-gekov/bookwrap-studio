@@ -780,16 +780,13 @@ export default function Home() {
               <TabsTrigger value="advanced">Advanced</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="simple" className="options-panel" asChild>
-              <motion.div {...fadeUp}>
-                <p className="simple-note">
-                  Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Title, author, back-cover copy, reviews, and a placeholder barcode are read from your cover or drafted for you — edit any of them under Advanced.
-                </p>
-              </motion.div>
+            <TabsContent value="simple" className="options-panel">
+              <p className="simple-note">
+                Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Title, author, back-cover copy, reviews, and a placeholder barcode are read from your cover or drafted for you — edit any of them under Advanced.
+              </p>
             </TabsContent>
 
-            <TabsContent value="advanced" className="options-panel advanced-panel" asChild>
-              <motion.div {...fadeUp}>
+            <TabsContent value="advanced" className="options-panel advanced-panel">
               <div className="unit-row">
                 <Label>Units</Label>
                 <Select value={config.unit} onValueChange={(value) => updateConfig("unit", value as Unit)}>
@@ -851,7 +848,6 @@ export default function Home() {
                   <Textarea value={direction} onChange={(event) => setDirection(event.target.value)} rows={3} placeholder="Optional" />
                 </div>
               </div>
-              </motion.div>
             </TabsContent>
           </Tabs>
         </aside>

@@ -108,13 +108,13 @@ export function BookPreview3D({
     floor.receiveShadow = true;
     scene.add(floor);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x6aa65c, 2.2));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xd9dde2, 2.2));
     const keyLight = new THREE.DirectionalLight(0xffffff, 3.8);
     keyLight.position.set(4, 7, 5);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(1024, 1024);
     scene.add(keyLight);
-    const rimLight = new THREE.DirectionalLight(0xbbe96f, 2.1);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 1.6);
     rimLight.position.set(-5, 2, -4);
     scene.add(rimLight);
 

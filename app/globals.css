@@ -438,6 +438,7 @@ html, body { overflow-x: hidden; }
 .back-panel {
   background: linear-gradient(160deg, #18222c, #2a4050 60%, #b79a5d);
   padding: 8% 8%; color: #fffdf6;
+  container-type: inline-size;
 }
 .cover-spread.has-art .back-panel,
 .cover-spread.has-art .spine-panel { background: transparent; box-shadow: none; }
@@ -459,18 +460,19 @@ html, body { overflow-x: hidden; }
   letter-spacing: 0.08em; text-transform: uppercase; font-style: normal;
   color: rgba(255, 253, 244, 0.72);
 }
+/* Mirrors the composited barcode box: 28% of the back width, ~9% of its height, 10% inset. */
 .barcode {
-  position: absolute; left: 8%; bottom: 8%;
-  min-width: 84px; padding: 5px 7px 4px; background: #fff;
-  display: flex; gap: 2px; align-items: flex-start; flex-wrap: wrap;
+  position: absolute; left: 10%; bottom: 10%;
+  width: 28cqw; aspect-ratio: 3.1; background: #fff;
 }
-.barcode span { width: 3px; height: 24px; background: #111; }
-.barcode span:nth-child(2) { width: 1px; }
-.barcode span:nth-child(3) { width: 5px; }
-.barcode span:nth-child(4) { width: 2px; }
-.barcode span:nth-child(5) { width: 6px; }
+.barcode::before {
+  content: ""; position: absolute; left: 5%; right: 5%; top: 9%; height: 58%;
+  background: repeating-linear-gradient(90deg, #111 0 1.4%, transparent 1.4% 3%, #111 3% 3.6%, transparent 3.6% 5.4%, #111 5.4% 7.4%, transparent 7.4% 8.8%);
+}
+.barcode span { display: none; }
 .barcode small {
-  width: 100%; margin-top: 2px; font-size: 7px; letter-spacing: 0.04em; color: #111;
+  position: absolute; left: 0; right: 0; bottom: 7%; text-align: center; white-space: nowrap;
+  font-size: 2.1cqw; letter-spacing: 0.03em; color: #111;
 }
 .spine-panel {
   background: #0f1820;
