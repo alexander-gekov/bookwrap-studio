@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import {
   BookOpen,
   Check,
@@ -20,6 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { BookPreview3D } from "@/components/book-preview-3d";
 import { IMAGE_MODELS, ModelPicker, type ImageModel } from "@/components/model-picker";
 
 type Unit = "in" | "mm";
@@ -39,6 +41,25 @@ const defaults: CoverConfig = { width: 6, height: 9, spine: 0.54, bleed: 0.125, 
 const toInches = (value: number, unit: Unit) => (unit === "in" ? value : value / 25.4);
 const toPx = (value: number, config: CoverConfig) => Math.round(toInches(value, config.unit) * config.dpi);
 const isBusy = (status: JobStatus) => ["queued", "analyzing", "generating", "compositing"].includes(status);
+
+const spring = { type: "spring", stiffness: 420, damping: 34, mass: 0.8 } as const;
+const fadeUp = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+  transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
+};
+
+function Hint({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent className="hint-tip" sideOffset={6}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function parseReviews(text: string) {
   return text
@@ -96,28 +117,115 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: nu
   ctx.drawImage(image, (image.width - sw) / 2, (image.height - sh) / 2, sw, sh, x, y, w, h);
 }
 
-function drawPanelSlice(
+type Dims = { trimW: number; trimH: number; spineW: number; bleed: number; totalW: number; totalH: number };
+
+function drawPlaceholderCopy(
   ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
-  sx: number,
-  sw: number,
-  dx: number,
-  dy: number,
-  dw: number,
-  dh: number,
+  dims: Dims,
+  copy: { title: string; author: string; blurb: string; reviews: string; isbn: string },
 ) {
-  const safeW = Math.max(1, sw);
-  const scale = Math.max(dw / safeW, dh / image.height);
-  const sliceW = dw / scale;
-  const sliceH = dh / scale;
-  ctx.drawImage(image, sx + (safeW - sliceW) / 2, (image.height - sliceH) / 2, sliceW, sliceH, dx, dy, dw, dh);
+  const backX = dims.bleed;
+  const spineX = dims.bleed + dims.trimW;
+  const panelY = dims.bleed;
+  const pad = Math.max(48, dims.trimW * 0.1);
+  const maxCopy = dims.trimW - pad * 2;
+  let y = panelY + pad;
+
+  ctx.fillStyle = "rgba(7,13,20,.42)";
+  ctx.fillRect(backX, panelY, dims.trimW, dims.trimH);
+  ctx.fillStyle = "rgba(7,13,20,.18)";
+  ctx.fillRect(spineX, panelY, dims.spineW, dims.trimH);
+  ctx.fillStyle = "#fffdf4";
+  ctx.textBaseline = "top";
+
+  if (copy.blurb.trim()) {
+    const fontSize = Math.max(28, Math.round(dims.trimW * 0.038));
+    ctx.font = `500 ${fontSize}px Georgia, serif`;
+    wrapLines(ctx, copy.blurb.trim(), maxCopy, 7).forEach((text) => {
+      ctx.fillText(text, backX + pad, y);
+      y += fontSize * 1.42;
+    });
+    y += fontSize * 0.8;
+  }
+
+  parseReviews(copy.reviews).forEach((review) => {
+    const quoteSize = Math.max(24, Math.round(dims.trimW * 0.032));
+    ctx.font = `italic 500 ${quoteSize}px Georgia, serif`;
+    wrapLines(ctx, `“${review.quote}”`, maxCopy, 3).forEach((text) => {
+      ctx.fillText(text, backX + pad, y);
+      y += quoteSize * 1.38;
+    });
+    if (review.attribution) {
+      ctx.font = `700 ${Math.max(16, Math.round(dims.trimW * 0.02))}px Arial`;
+      ctx.fillText(review.attribution.toUpperCase(), backX + pad, y + 6);
+      y += quoteSize * 1.7;
+    } else {
+      y += quoteSize * 0.6;
+    }
+  });
+
+  if (dims.spineW > 28) {
+    ctx.save();
+    ctx.translate(spineX + dims.spineW / 2, dims.totalH / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,.45)";
+    ctx.shadowBlur = Math.max(6, dims.spineW * 0.08);
+    const titleSize = Math.round(Math.min(dims.spineW * 0.72, dims.trimH * 0.055));
+    ctx.font = `800 ${titleSize}px Arial`;
+    ctx.fillText(copy.title.toUpperCase(), 0, copy.author ? -titleSize * 0.28 : 0, dims.trimH * 0.86);
+    if (copy.author) {
+      ctx.font = `600 ${Math.round(titleSize * 0.42)}px Arial`;
+      ctx.fillText(copy.author.toUpperCase(), 0, titleSize * 0.42, dims.trimH * 0.7);
+    }
+    ctx.restore();
+  }
+
+  const isbnDigits = copy.isbn.replace(/[^\dX]/gi, "");
+  if (isbnDigits || copy.isbn.trim()) {
+    const boxW = Math.max(220, dims.trimW * 0.28);
+    const boxH = Math.max(90, dims.trimH * 0.09);
+    const bx = backX + pad;
+    const by = panelY + dims.trimH - pad - boxH;
+    ctx.fillStyle = "#fffdf4";
+    ctx.fillRect(bx, by, boxW, boxH);
+    ctx.fillStyle = "#111922";
+    const barCount = Math.max(24, isbnDigits.length * 2);
+    for (let i = 0; i < barCount; i++) {
+      const wide = (isbnDigits.charCodeAt(i % Math.max(isbnDigits.length, 1)) || 48) % 3 === 0;
+      ctx.fillRect(bx + 10 + i * ((boxW - 20) / barCount), by + 10, wide ? 3 : 1.5, boxH * 0.58);
+    }
+    ctx.font = `600 ${Math.max(14, Math.round(boxH * 0.16))}px Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(copy.isbn.trim() || isbnDigits, bx + boxW / 2, by + boxH - 10);
+    ctx.textAlign = "start";
+  }
+}
+
+function extendBleed(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  bleed: number,
+  trimWidth: number,
+  trimHeight: number,
+) {
+  if (bleed <= 0) return;
+  ctx.drawImage(canvas, bleed, bleed, trimWidth, 1, bleed, 0, trimWidth, bleed);
+  ctx.drawImage(canvas, bleed, bleed + trimHeight - 1, trimWidth, 1, bleed, bleed + trimHeight, trimWidth, bleed);
+  ctx.drawImage(canvas, bleed, bleed, 1, trimHeight, 0, bleed, bleed, trimHeight);
+  ctx.drawImage(canvas, bleed + trimWidth - 1, bleed, 1, trimHeight, bleed + trimWidth, bleed, bleed, trimHeight);
+  ctx.drawImage(canvas, bleed, bleed, 1, 1, 0, 0, bleed, bleed);
+  ctx.drawImage(canvas, bleed + trimWidth - 1, bleed, 1, 1, bleed + trimWidth, 0, bleed, bleed);
+  ctx.drawImage(canvas, bleed, bleed + trimHeight - 1, 1, 1, 0, bleed + trimHeight, bleed, bleed);
+  ctx.drawImage(canvas, bleed + trimWidth - 1, bleed + trimHeight - 1, 1, 1, bleed + trimWidth, bleed + trimHeight, bleed, bleed);
 }
 
 export default function Home() {
   const [config, setConfig] = useState<CoverConfig>(defaults);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverUrl, setCoverUrl] = useState("");
-  const [coverRatio, setCoverRatio] = useState(6 / 9);
   const [generatedUrl, setGeneratedUrl] = useState("");
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
@@ -132,6 +240,7 @@ export default function Home() {
   const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState("");
   const [panel, setPanel] = useState("simple");
+  const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -164,7 +273,6 @@ export default function Home() {
   const applyCoverRatio = useCallback((ratio: number, unit: Unit) => {
     const height = unit === "in" ? 9 : 229;
     const width = Math.round(height * ratio * 1000) / 1000;
-    setCoverRatio(ratio);
     setConfig((current) => ({ ...current, unit, width, height }));
   }, []);
 
@@ -265,8 +373,6 @@ export default function Home() {
     form.append("width", String(config.width));
     form.append("height", String(config.height));
     form.append("spine", String(config.spine));
-    form.append("unit", config.unit);
-    form.append("aspect", String(coverRatio));
 
     try {
       const response = await fetch("/api/generate", { method: "POST", body: form });
@@ -295,10 +401,19 @@ export default function Home() {
             image?: string;
             format?: string;
             error?: string;
+            meta?: Partial<Record<"title" | "author" | "blurb" | "reviews" | "isbn", string>>;
           };
           if (event.type === "status" && event.stage) {
             setStatus(event.stage);
             setStatusMessage(event.message || "");
+          }
+          if (event.type === "meta" && event.meta) {
+            const meta = event.meta;
+            setTitle((value) => value || meta.title || "");
+            setAuthor((value) => value || meta.author || "");
+            setBlurb((value) => value || meta.blurb || "");
+            setReviews((value) => value || meta.reviews || "");
+            setIsbn((value) => value || meta.isbn || "");
           }
           if (event.type === "result" && event.image) {
             setStatus("compositing");
@@ -327,122 +442,51 @@ export default function Home() {
     const front = await loadImage(coverUrl);
     const artwork = generatedUrl ? await loadImage(generatedUrl) : null;
     const backX = dims.bleed;
-    const spineX = dims.bleed + dims.trimW;
     const frontX = dims.bleed + dims.trimW + dims.spineW;
     const panelY = dims.bleed;
 
     ctx.fillStyle = "#111922";
     ctx.fillRect(0, 0, dims.totalW, dims.totalH);
 
-    if (artwork) {
-      const artUnits = dims.trimW * 2 + dims.spineW;
-      const artBackW = (artwork.width * dims.trimW) / artUnits;
-      const artSpineW = (artwork.width * dims.spineW) / artUnits;
-      drawPanelSlice(ctx, artwork, 0, artBackW, 0, 0, dims.bleed + dims.trimW, dims.totalH);
-      drawPanelSlice(ctx, artwork, artBackW, artSpineW, spineX, 0, dims.spineW, dims.totalH);
-      drawPanelSlice(
-        ctx,
-        artwork,
-        artBackW + artSpineW,
-        artwork.width - artBackW - artSpineW,
-        frontX,
-        0,
-        dims.trimW + dims.bleed,
-        dims.totalH,
-      );
-    }
+    // The model lays out back | spine | front at exact width shares, so stretch-fill
+    // (not cover-crop) keeps those panels aligned with the trim geometry.
+    if (artwork) ctx.drawImage(artwork, backX, panelY, dims.trimW * 2 + dims.spineW, dims.trimH);
 
     drawCover(ctx, front, frontX, panelY, dims.trimW, dims.trimH);
 
-    if (!artwork) {
-      ctx.fillStyle = "rgba(7,13,20,.42)";
-      ctx.fillRect(backX, panelY, dims.trimW, dims.trimH);
-      ctx.fillStyle = "rgba(7,13,20,.18)";
-      ctx.fillRect(spineX, 0, dims.spineW, dims.totalH);
-    } else {
-      ctx.fillStyle = "rgba(7,13,20,.28)";
-      ctx.fillRect(backX, panelY, dims.trimW, dims.trimH);
-    }
+    // Generated artwork carries its own typography and barcode; canvas copy is only the
+    // pre-generation placeholder.
+    if (!artwork) drawPlaceholderCopy(ctx, dims, { title, author, blurb, reviews, isbn });
 
-    const pad = Math.max(48, dims.trimW * 0.1);
-    const maxCopy = dims.trimW - pad * 2;
-    let y = panelY + pad;
-    ctx.fillStyle = "#fffdf4";
-    ctx.textBaseline = "top";
-
-    if (blurb.trim()) {
-      const fontSize = Math.max(28, Math.round(dims.trimW * 0.038));
-      ctx.font = `500 ${fontSize}px Georgia, serif`;
-      wrapLines(ctx, blurb.trim(), maxCopy, 7).forEach((text) => {
-        ctx.fillText(text, backX + pad, y);
-        y += fontSize * 1.42;
-      });
-      y += fontSize * 0.8;
-    }
-
-    parseReviews(reviews).forEach((review) => {
-      const quoteSize = Math.max(24, Math.round(dims.trimW * 0.032));
-      ctx.font = `italic 500 ${quoteSize}px Georgia, serif`;
-      wrapLines(ctx, `“${review.quote}”`, maxCopy, 3).forEach((text) => {
-        ctx.fillText(text, backX + pad, y);
-        y += quoteSize * 1.38;
-      });
-      if (review.attribution) {
-        ctx.font = `700 ${Math.max(16, Math.round(dims.trimW * 0.02))}px Arial`;
-        ctx.fillText(review.attribution.toUpperCase(), backX + pad, y + 6);
-        y += quoteSize * 1.7;
-      } else {
-        y += quoteSize * 0.6;
-      }
-    });
-
-    const isbnDigits = isbn.replace(/[^\dX]/gi, "");
-    if (isbnDigits || isbn.trim()) {
-      const boxW = Math.max(220, dims.trimW * 0.28);
-      const boxH = Math.max(90, dims.trimH * 0.09);
-      const bx = backX + pad;
-      const by = panelY + dims.trimH - pad - boxH;
-      ctx.fillStyle = "#fffdf4";
-      ctx.fillRect(bx, by, boxW, boxH);
-      ctx.fillStyle = "#111922";
-      const barCount = Math.max(24, isbnDigits.length * 2);
-      for (let i = 0; i < barCount; i++) {
-        const wide = (isbnDigits.charCodeAt(i % Math.max(isbnDigits.length, 1)) || 48) % 3 === 0;
-        ctx.fillRect(bx + 10 + i * ((boxW - 20) / barCount), by + 10, wide ? 3 : 1.5, boxH * 0.58);
-      }
-      ctx.font = `600 ${Math.max(14, Math.round(boxH * 0.16))}px Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(isbn.trim() || isbnDigits, bx + boxW / 2, by + boxH - 10);
-      ctx.textAlign = "start";
-    }
-
-    if (dims.spineW > 28) {
-      ctx.save();
-      ctx.translate(spineX + dims.spineW / 2, dims.totalH / 2);
-      ctx.rotate(Math.PI / 2);
-      ctx.fillStyle = "#fffdf4";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.shadowColor = "rgba(0,0,0,.45)";
-      ctx.shadowBlur = Math.max(6, dims.spineW * 0.08);
-      const titleSize = Math.round(Math.min(dims.spineW * 0.72, dims.trimH * 0.055));
-      ctx.font = `800 ${titleSize}px Arial`;
-      ctx.fillText(title.toUpperCase(), 0, author ? -titleSize * 0.28 : 0, dims.trimH * 0.86);
-      if (author) {
-        ctx.font = `600 ${Math.round(titleSize * 0.42)}px Arial`;
-        ctx.fillText(author.toUpperCase(), 0, titleSize * 0.42, dims.trimH * 0.7);
-      }
-      ctx.restore();
-    }
-
-    ctx.strokeStyle = "rgba(0,0,0,.22)";
-    ctx.lineWidth = Math.max(1, Math.round(config.dpi / 150));
-    ctx.setLineDash([12, 8]);
-    ctx.strokeRect(dims.bleed, dims.bleed, dims.totalW - dims.bleed * 2, dims.trimH);
-    ctx.setLineDash([]);
+    extendBleed(canvas, ctx, dims.bleed, dims.trimW * 2 + dims.spineW, dims.trimH);
     return canvas;
-  }, [author, blurb, config.dpi, coverUrl, dims, generatedUrl, isbn, reviews, title]);
+  }, [author, blurb, coverUrl, dims, generatedUrl, isbn, reviews, title]);
+
+  // Trim-only (no bleed) composite at preview resolution, so the 3D book shows the same
+  // wrap that downloads produce instead of the raw model output.
+  const [wrapPreviewUrl, setWrapPreviewUrl] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (!generatedUrl) {
+        setWrapPreviewUrl("");
+        return;
+      }
+      const source = await compose();
+      if (!source || cancelled) return;
+      const trimW = dims.trimW * 2 + dims.spineW;
+      const scale = Math.min(1, 2400 / trimW);
+      const preview = document.createElement("canvas");
+      preview.width = Math.round(trimW * scale);
+      preview.height = Math.round(dims.trimH * scale);
+      preview.getContext("2d")?.drawImage(source, dims.bleed, dims.bleed, trimW, dims.trimH, 0, 0, preview.width, preview.height);
+      if (!cancelled) setWrapPreviewUrl(preview.toDataURL("image/jpeg", 0.9));
+    }, 150);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [compose, dims, generatedUrl]);
 
   const download = async (part: "wrap" | "front" | "spine" | "back") => {
     const source = await compose();
@@ -476,7 +520,6 @@ export default function Home() {
     setConfig(defaults);
     setCoverFile(null);
     setCoverUrl("");
-    setCoverRatio(6 / 9);
     setGeneratedUrl("");
     setTitle("");
     setAuthor("");
@@ -491,7 +534,17 @@ export default function Home() {
     setError("");
   };
 
+  const activeStep = canDownload ? 3 : ready ? 2 : 1;
+  const steps = [
+    { n: 1, label: "Upload", done: ready },
+    { n: 2, label: "Generate", done: canDownload },
+    { n: 3, label: "Download", done: false },
+  ];
+  const generateLabel = isBusy(status) ? statusMessage || "Generating…" : "Generate wrap";
+
   return (
+    <MotionConfig reducedMotion="user" transition={spring}>
+    <TooltipProvider delayDuration={350}>
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
@@ -504,41 +557,50 @@ export default function Home() {
           </div>
         </div>
         <nav className="step-nav" aria-label="Workflow">
-          <span className={ready ? "done" : "active"}>
-            <em>1</em>
-            <span>Upload</span>
-          </span>
-          <span className={canDownload ? "done" : isBusy(status) ? "active" : ""}>
-            <em>2</em>
-            <span>Generate</span>
-          </span>
-          <span className={canDownload ? "active" : ""}>
-            <em>3</em>
-            <span>Download</span>
-          </span>
+          {steps.map((step) => {
+            const active = step.n === activeStep;
+            return (
+              <span key={step.n} className={active ? "active" : step.done ? "done" : ""} aria-current={active ? "step" : undefined}>
+                {active && <motion.span className="step-pill" layoutId="step-pill" transition={spring} />}
+                <em>{step.done && !active ? <Check /> : step.n}</em>
+                <span>{step.label}</span>
+              </span>
+            );
+          })}
         </nav>
-        <button className="text-btn" type="button" onClick={reset}>
-          Reset
-        </button>
+        <Hint label="Clear the upload, wrap, and settings">
+          <motion.button className="text-btn" type="button" onClick={reset} whileTap={{ scale: 0.95 }}>
+            Reset
+          </motion.button>
+        </Hint>
       </header>
 
-      <section className="hero">
-        <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+      <section className={`hero ${ready ? "compact" : ""}`}>
+        <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
           Turn a front cover into a full wrap.
         </motion.h1>
-        <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.05 }}>
+        <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}>
           Upload your finished front. Generate a matching spine and back at the same proportions. Download print-ready PNGs.
         </motion.p>
       </section>
 
-      <section className="workspace">
+      <motion.section
+        className={`workspace ${ready ? "" : "landing"}`}
+        layout
+        initial={{ opacity: 0, y: 28 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+      >
         <aside className="control-panel">
-          <div
-            className={`dropzone ${ready ? "has-file" : ""}`}
+          <motion.div
+            className={`dropzone ${ready ? "has-file" : ""} ${dragging ? "dragging" : ""}`}
             onClick={() => fileInput.current?.click()}
             onDragOver={(event) => event.preventDefault()}
+            onDragEnter={() => setDragging(true)}
+            onDragLeave={() => setDragging(false)}
             onDrop={(event) => {
               event.preventDefault();
+              setDragging(false);
               void acceptFile(event.dataTransfer.files[0]);
             }}
             role="button"
@@ -546,6 +608,9 @@ export default function Home() {
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") fileInput.current?.click();
             }}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.985 }}
+            animate={{ scale: dragging ? 1.015 : 1 }}
           >
             <input
               ref={fileInput}
@@ -554,13 +619,50 @@ export default function Home() {
               hidden
               onChange={(event) => void acceptFile(event.target.files?.[0])}
             />
-            {coverUrl ? <img src={coverUrl} alt="Uploaded front cover" /> : <div className="upload-icon"><Upload /></div>}
+            <AnimatePresence mode="popLayout" initial={false}>
+              {coverUrl ? (
+                <motion.img
+                  key={coverUrl}
+                  src={coverUrl}
+                  alt="Uploaded front cover"
+                  initial={{ opacity: 0, scale: 0.8, rotate: -4 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                />
+              ) : (
+                <motion.div
+                  key="icon"
+                  className="upload-icon"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                >
+                  <motion.span animate={dragging ? { y: [0, -3, 0] } : { y: 0 }} transition={dragging ? { repeat: Infinity, duration: 0.9 } : spring}>
+                    <Upload />
+                  </motion.span>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <div>
-              <strong>{coverFile?.name || "Drop your front cover"}</strong>
-              <span>{coverFile ? "Click to replace · proportions locked to this image" : "PNG, JPG, or WebP · max 15 MB"}</span>
+              <strong>{dragging ? "Release to upload" : coverFile?.name || "Drop your front cover here"}</strong>
+              <span>{coverFile ? "Click to replace · proportions locked to this image" : "or click to browse · PNG, JPG, or WebP · max 15 MB"}</span>
             </div>
-            {ready && <Check className="file-check" />}
-          </div>
+            <AnimatePresence>
+              {ready && (
+                <Hint label="Trim proportions locked to this image">
+                  <motion.span
+                    className="file-check"
+                    initial={{ scale: 0, rotate: -30 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    exit={{ scale: 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 22 }}
+                  >
+                    <Check />
+                  </motion.span>
+                </Hint>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           <div className="model-field">
             <Label>Image model</Label>
@@ -588,43 +690,85 @@ export default function Home() {
                 autoComplete="off"
                 spellCheck={false}
               />
-              <button type="button" aria-label={showKey ? "Hide API key" : "Show API key"} onClick={() => setShowKey((value) => !value)}>
-                {showKey ? <EyeOff /> : <Eye />}
-              </button>
+              <Hint label={showKey ? "Hide key" : "Show key"}>
+                <motion.button
+                  type="button"
+                  aria-label={showKey ? "Hide API key" : "Show API key"}
+                  onClick={() => setShowKey((value) => !value)}
+                  whileTap={{ scale: 0.88 }}
+                >
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={showKey ? "off" : "on"}
+                      initial={{ opacity: 0, scale: 0.6 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.6 }}
+                      transition={{ duration: 0.14 }}
+                    >
+                      {showKey ? <EyeOff /> : <Eye />}
+                    </motion.span>
+                  </AnimatePresence>
+                </motion.button>
+              </Hint>
             </div>
           </div>
 
-          {error && (
-            <div className="error-message" role="alert">
-              {error}
-            </div>
-          )}
+          <AnimatePresence initial={false}>
+            {error && (
+              <motion.div
+                className="error-message"
+                role="alert"
+                initial={{ opacity: 0, height: 0, marginTop: -16 }}
+                animate={{ opacity: 1, height: "auto", marginTop: 0 }}
+                exit={{ opacity: 0, height: 0, marginTop: -16 }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <motion.div initial={{ x: 0 }} animate={{ x: [0, -4, 4, -2, 0] }} transition={{ duration: 0.35, delay: 0.1 }}>
+                  {error}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <Button className="generate-button" onClick={() => void generate()} disabled={isBusy(status)}>
-            {isBusy(status) ? <LoaderCircle className="spin" /> : <Sparkles />}
-            {isBusy(status) ? statusMessage || "Generating…" : "Generate wrap"}
-          </Button>
+          <motion.div whileTap={isBusy(status) ? undefined : { scale: 0.98 }}>
+            <Button className="generate-button" onClick={() => void generate()} disabled={isBusy(status)}>
+              {isBusy(status) ? <LoaderCircle className="spin" /> : <Sparkles />}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span key={generateLabel} className="generate-label" {...fadeUp} transition={{ duration: 0.2 }}>
+                  {generateLabel}
+                </motion.span>
+              </AnimatePresence>
+            </Button>
+          </motion.div>
 
           <AnimatePresence>
             {canDownload && (
               <motion.div
                 className="download-row"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
+                initial="hidden"
+                animate="show"
+                exit="hidden"
+                variants={{
+                  hidden: { opacity: 0, height: 0 },
+                  show: { opacity: 1, height: "auto", transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+                }}
               >
-                <Button variant="outline" onClick={() => void download("back")}>
-                  <Download /> Back
-                </Button>
-                <Button variant="outline" onClick={() => void download("spine")}>
-                  <Download /> Spine
-                </Button>
-                <Button variant="outline" onClick={() => void download("front")}>
-                  <Download /> Front
-                </Button>
-                <Button className="download-wrap" onClick={() => void download("wrap")}>
-                  <Download /> Full wrap
-                </Button>
+                {(["back", "spine", "front"] as const).map((part) => (
+                  <motion.div key={part} variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} whileTap={{ scale: 0.96 }}>
+                    <Hint label={`Download the ${part} panel PNG with bleed`}>
+                      <Button variant="outline" onClick={() => void download(part)}>
+                        <Download /> {part[0].toUpperCase() + part.slice(1)}
+                      </Button>
+                    </Hint>
+                  </motion.div>
+                ))}
+                <motion.div className="download-wrap-slot" variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} whileTap={{ scale: 0.985 }}>
+                  <Hint label={`Full ${dims.totalW.toLocaleString()} × ${dims.totalH.toLocaleString()} px print spread`}>
+                    <Button className="download-wrap" onClick={() => void download("wrap")}>
+                      <Download /> Full wrap
+                    </Button>
+                  </Hint>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -637,7 +781,7 @@ export default function Home() {
 
             <TabsContent value="simple" className="options-panel">
               <p className="simple-note">
-                Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Open Advanced for spine, bleed, and optional cover copy.
+                Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Title, author, back-cover copy, reviews, and a placeholder barcode are read from your cover or drafted for you — edit any of them under Advanced.
               </p>
             </TabsContent>
 
@@ -679,24 +823,24 @@ export default function Home() {
               <div className="copy-grid">
                 <div className="field-stack">
                   <Label>Book title</Label>
-                  <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Optional" />
+                  <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Read from cover" />
                 </div>
                 <div className="field-stack">
                   <Label>Author</Label>
-                  <Input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="Optional" />
+                  <Input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="Read from cover" />
                 </div>
                 <div className="field-stack full">
                   <Label>Back-cover copy</Label>
-                  <Textarea value={blurb} onChange={(event) => setBlurb(event.target.value)} rows={3} placeholder="Optional" />
+                  <Textarea value={blurb} onChange={(event) => setBlurb(event.target.value)} rows={3} placeholder="Drafted from your cover on generate" />
                 </div>
                 <div className="field-stack full">
                   <Label>Reviews</Label>
-                  <Textarea value={reviews} onChange={(event) => setReviews(event.target.value)} rows={3} placeholder="Optional" />
+                  <Textarea value={reviews} onChange={(event) => setReviews(event.target.value)} rows={3} placeholder="Drafted from your cover on generate" />
                   <small className="field-hint">One quote per line, ending with — Attribution</small>
                 </div>
                 <div className="field-stack">
                   <Label>ISBN</Label>
-                  <Input value={isbn} onChange={(event) => setIsbn(event.target.value)} placeholder="Optional" />
+                  <Input value={isbn} onChange={(event) => setIsbn(event.target.value)} placeholder="Placeholder barcode until set" />
                 </div>
                 <div className="field-stack full">
                   <Label>Art direction</Label>
@@ -707,145 +851,155 @@ export default function Home() {
           </Tabs>
         </aside>
 
-        <section className="preview-panel">
+        {ready && (
+        <motion.section
+          className="preview-panel"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        >
           <div className="preview-header">
             <div>
               <p className="eyebrow">Live preview</p>
-              <h2>Full wrap</h2>
+              <h2>Cover preview</h2>
             </div>
-            <div className="size-readout">
-              <span>
-                {totalDisplay.toFixed(3)} × {heightDisplay.toFixed(3)} {config.unit}
-              </span>
-              <strong>
-                {dims.totalW.toLocaleString()} × {dims.totalH.toLocaleString()} px
-              </strong>
-            </div>
+            <Hint label={`Back + spine + front with ${config.bleed} ${config.unit} bleed at ${config.dpi} DPI`}>
+              <div className="size-readout" tabIndex={0}>
+                <span>
+                  {totalDisplay.toFixed(3)} × {heightDisplay.toFixed(3)} {config.unit}
+                </span>
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.strong
+                    key={`${dims.totalW}x${dims.totalH}`}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {dims.totalW.toLocaleString()} × {dims.totalH.toLocaleString()} px
+                  </motion.strong>
+                </AnimatePresence>
+              </div>
+            </Hint>
           </div>
 
-          <div className="stage">
-            <div className="book-preview" aria-label="3D book preview">
-              <motion.div
-                className="book-3d"
-                style={{ aspectRatio: coverRatio }}
-                initial={{ opacity: 0, rotateX: 4, rotateY: -18, y: 8 }}
-                animate={{ opacity: 1, rotateX: 4, rotateY: -28, y: 0 }}
-                transition={{ duration: 0.45 }}
-              >
-                <div
-                  className="book-3d-back"
-                  style={generatedUrl ? { backgroundImage: `url(${generatedUrl})` } : undefined}
+          <Tabs defaultValue="book" className="preview-tabs">
+            <TabsList className="preview-tab-list">
+              <TabsTrigger value="book">3D book</TabsTrigger>
+              <TabsTrigger value="spread">Print spread</TabsTrigger>
+            </TabsList>
+            <TabsContent value="book" className="preview-tab-content" asChild>
+              <motion.div className="three-preview" initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
+                <BookPreview3D
+                  frontUrl={coverUrl}
+                  wrapUrl={wrapPreviewUrl}
+                  trimWidth={config.width}
+                  trimHeight={config.height}
+                  spineWidth={config.spine}
                 />
-                <div className="book-3d-pages" />
-                <div
-                  className="book-3d-spine"
-                  style={generatedUrl ? { backgroundImage: `url(${generatedUrl})` } : undefined}
-                >
-                  {title && <span>{title}</span>}
-                </div>
-                <div className="book-3d-front">
-                  {coverUrl ? <img src={coverUrl} alt="Front cover on a 3D book" /> : <ImagePlus />}
-                </div>
+                <AnimatePresence>
+                  {isBusy(status) && (
+                    <motion.div
+                      className="three-job-status"
+                      initial={{ opacity: 0, y: -10, scale: 0.94 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.94 }}
+                    >
+                      <LoaderCircle />
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.span key={statusMessage} {...fadeUp} transition={{ duration: 0.2 }}>
+                          {statusMessage || "Generating your wrap…"}
+                        </motion.span>
+                      </AnimatePresence>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
-              <p className="book-preview-caption">
-                {isBusy(status)
-                  ? statusMessage || "Generating your wrap…"
-                  : generatedUrl
-                    ? "Generated wrap on a 3D book"
-                    : coverUrl
-                      ? "Front cover ready to extend"
-                      : "Upload a front cover to preview the book"}
-              </p>
-            </div>
-            <div className="stage-labels">
-              <span>BACK</span>
-              <span>SPINE</span>
-              <span>FRONT</span>
-            </div>
-            <div className="stage-scroll">
-              <motion.div
-                className={`cover-spread ${!ready ? "empty-spread" : ""} ${generatedUrl ? "has-art" : ""}`}
-                style={{
-                  gridTemplateColumns: `${config.width}fr ${config.spine}fr ${config.width}fr`,
-                  aspectRatio: `${totalDisplay} / ${heightDisplay}`,
-                }}
-                layout
-              >
-                {generatedUrl && <img className="wrap-art" src={generatedUrl} alt="" />}
-              <div className="panel back-panel">
-                {ready ? (
-                  <>
-                    <p className="back-copy">{blurb}</p>
-                    <div className="back-reviews">
-                      {parseReviews(reviews).map((review) => (
-                        <blockquote key={review.quote}>
-                          <p>{review.quote}</p>
-                          {review.attribution && <cite>{review.attribution}</cite>}
-                        </blockquote>
-                      ))}
-                    </div>
-                    {isbn && (
-                      <div className="barcode">
-                        <span />
-                        <span />
-                        <span />
-                        <span />
-                        <span />
-                        <small>{isbn}</small>
+            </TabsContent>
+            <TabsContent value="spread" className="preview-tab-content" asChild>
+              <motion.div className="flat-preview" {...fadeUp}>
+              <div className="stage-labels">
+                <span>BACK</span>
+                <span>SPINE</span>
+                <span>FRONT</span>
+              </div>
+              <div className="stage-scroll">
+                <motion.div
+                  className={`cover-spread ${!ready ? "empty-spread" : ""} ${generatedUrl ? "has-art" : ""}`}
+                  style={{
+                    gridTemplateColumns: `${config.width}fr ${config.spine}fr ${config.width}fr`,
+                    aspectRatio: `${totalDisplay} / ${heightDisplay}`,
+                  }}
+                  layout
+                >
+                  {generatedUrl && <img className="wrap-art" src={generatedUrl} alt="" />}
+                  <div className="panel back-panel">
+                    {ready ? (
+                      <>
+                        <p className="back-copy">{blurb}</p>
+                        <div className="back-reviews">
+                          {parseReviews(reviews).map((review) => (
+                            <blockquote key={review.quote}>
+                              <p>{review.quote}</p>
+                              {review.attribution && <cite>{review.attribution}</cite>}
+                            </blockquote>
+                          ))}
+                        </div>
+                        {isbn && (
+                          <div className="barcode">
+                            <span />
+                            <span />
+                            <span />
+                            <span />
+                            <span />
+                            <small>{isbn}</small>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="empty-copy">
+                        <ImagePlus />
+                        <strong>Spine + back</strong>
+                        <span>appear after generate</span>
                       </div>
                     )}
-                  </>
-                ) : (
-                  <div className="empty-copy">
-                    <ImagePlus />
-                    <strong>Spine + back</strong>
-                    <span>appear after generate</span>
                   </div>
-                )}
-              </div>
-              <div className="panel spine-panel">
-                {ready ? (
-                  <div className="spine-copy">
-                    <strong>{title}</strong>
-                    {author && <em>{author}</em>}
+                  <div className="panel spine-panel">
+                    {ready ? (
+                      <div className="spine-copy">
+                        <strong>{title}</strong>
+                        {author && <em>{author}</em>}
+                      </div>
+                    ) : (
+                      <span>SPINE</span>
+                    )}
                   </div>
-                ) : (
-                  <span>SPINE</span>
-                )}
-              </div>
-              <div className="panel front-panel">
-                {coverUrl ? (
-                  <img src={coverUrl} alt="Front cover preview" />
-                ) : (
-                  <div className="front-placeholder">
-                    <span>FRONT</span>
-                    <strong>
-                      Upload
-                      <br />
-                      cover
-                    </strong>
+                  <div className="panel front-panel">
+                    {coverUrl ? (
+                      <img src={coverUrl} alt="Front cover preview" />
+                    ) : (
+                      <div className="front-placeholder">
+                        <span>FRONT</span>
+                        <strong>
+                          Upload
+                          <br />
+                          cover
+                        </strong>
+                      </div>
+                    )}
                   </div>
-                )}
+                </motion.div>
               </div>
-              <i className="bleed-line" />
-              {isBusy(status) && (
-                <div className="job-overlay">
-                  <span className="job-orbit">
-                    <LoaderCircle />
-                  </span>
-                  <p>
-                    <small>LIVE · {selectedModel.name.toUpperCase()}</small>
-                    <strong>{statusMessage || "Working…"}</strong>
-                  </p>
-                </div>
-                )}
               </motion.div>
-            </div>
-          </div>
-        </section>
-      </section>
+            </TabsContent>
+          </Tabs>
+        </motion.section>
+        )}
+      </motion.section>
 
       <canvas ref={canvasRef} hidden />
     </main>
+    </TooltipProvider>
+    </MotionConfig>
   );
 }
