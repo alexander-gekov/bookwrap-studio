@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Atom, Check, ChevronDown, Image, Route, Search, Sparkles, Waves } from "lucide-react";
+import { Atom, Check, ChevronDown, ImageIcon, Route, Search, Sparkles, Waves } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
@@ -135,7 +135,7 @@ export function ModelPicker({ value, onChange }: { value: ImageModel; onChange: 
               <span className="model-option-copy"><span className="model-name-row"><strong>{model.name}</strong><em>{model.badge}</em></span><small>{model.description}</small></span>
               <span className="model-check">{active && <Check />}</span>
             </button>;
-          })}{filteredModels.length === 0 && <p className="model-empty"><Image /> No matching image models.</p>}</div>
+          })}{filteredModels.length === 0 && <p className="model-empty"><ImageIcon /> No matching image models.</p>}</div>
         </section>
       </div>
       <p className="model-footnote">{catalogError || "Availability and charges depend on your OpenRouter account."}</p>
