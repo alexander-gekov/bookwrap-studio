@@ -504,9 +504,18 @@ export default function Home() {
           </div>
         </div>
         <nav className="step-nav" aria-label="Workflow">
-          <span className={ready ? "done" : "active"}>1 · Upload</span>
-          <span className={canDownload ? "done" : isBusy(status) ? "active" : ""}>2 · Generate</span>
-          <span className={canDownload ? "active" : ""}>3 · Download</span>
+          <span className={ready ? "done" : "active"}>
+            <em>1</em>
+            <span>Upload</span>
+          </span>
+          <span className={canDownload ? "done" : isBusy(status) ? "active" : ""}>
+            <em>2</em>
+            <span>Generate</span>
+          </span>
+          <span className={canDownload ? "active" : ""}>
+            <em>3</em>
+            <span>Download</span>
+          </span>
         </nav>
         <button className="text-btn" type="button" onClick={reset}>
           Reset
@@ -720,15 +729,16 @@ export default function Home() {
               <span>SPINE</span>
               <span>FRONT</span>
             </div>
-            <motion.div
-              className={`cover-spread ${!ready ? "empty-spread" : ""} ${generatedUrl ? "has-art" : ""}`}
-              style={{
-                gridTemplateColumns: `${config.width}fr ${config.spine}fr ${config.width}fr`,
-                aspectRatio: `${totalDisplay} / ${heightDisplay}`,
-              }}
-              layout
-            >
-              {generatedUrl && <img className="wrap-art" src={generatedUrl} alt="" />}
+            <div className="stage-scroll">
+              <motion.div
+                className={`cover-spread ${!ready ? "empty-spread" : ""} ${generatedUrl ? "has-art" : ""}`}
+                style={{
+                  gridTemplateColumns: `${config.width}fr ${config.spine}fr ${config.width}fr`,
+                  aspectRatio: `${totalDisplay} / ${heightDisplay}`,
+                }}
+                layout
+              >
+                {generatedUrl && <img className="wrap-art" src={generatedUrl} alt="" />}
               <div className="panel back-panel">
                 {ready ? (
                   <>
@@ -793,8 +803,9 @@ export default function Home() {
                     <strong>{statusMessage || "Working…"}</strong>
                   </p>
                 </div>
-              )}
-            </motion.div>
+                )}
+              </motion.div>
+            </div>
           </div>
         </section>
       </section>
