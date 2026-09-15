@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BookPreview3D } from "@/components/book-preview-3d";
 import { IMAGE_MODELS, ModelPicker, type ImageModel } from "@/components/model-picker";
 
 type Unit = "in" | "mm";
@@ -436,11 +437,6 @@ export default function Home() {
       ctx.restore();
     }
 
-    ctx.strokeStyle = "rgba(0,0,0,.22)";
-    ctx.lineWidth = Math.max(1, Math.round(config.dpi / 150));
-    ctx.setLineDash([12, 8]);
-    ctx.strokeRect(dims.bleed, dims.bleed, dims.totalW - dims.bleed * 2, dims.trimH);
-    ctx.setLineDash([]);
     return canvas;
   }, [author, blurb, config.dpi, coverUrl, dims, generatedUrl, isbn, reviews, title]);
 
@@ -711,7 +707,7 @@ export default function Home() {
           <div className="preview-header">
             <div>
               <p className="eyebrow">Live preview</p>
-              <h2>Full wrap</h2>
+              <h2>Interactive book</h2>
             </div>
             <div className="size-readout">
               <span>
@@ -724,122 +720,98 @@ export default function Home() {
           </div>
 
           <div className="stage">
-            <div className="book-preview" aria-label="3D book preview">
-              <motion.div
-                className="book-3d"
-                style={{ aspectRatio: coverRatio }}
-                initial={{ opacity: 0, rotateX: 4, rotateY: -18, y: 8 }}
-                animate={{ opacity: 1, rotateX: 4, rotateY: -28, y: 0 }}
-                transition={{ duration: 0.45 }}
-              >
-                <div
-                  className="book-3d-back"
-                  style={generatedUrl ? { backgroundImage: `url(${generatedUrl})` } : undefined}
-                />
-                <div className="book-3d-pages" />
-                <div
-                  className="book-3d-spine"
-                  style={generatedUrl ? { backgroundImage: `url(${generatedUrl})` } : undefined}
+            <div className="three-preview">
+              <BookPreview3D
+                frontUrl={coverUrl}
+                wrapUrl={generatedUrl}
+                trimWidth={config.width}
+                trimHeight={config.height}
+                spineWidth={config.spine}
+              />
+              {isBusy(status) && (
+                <div className="three-job-status">
+                  <LoaderCircle />
+                  <span>{statusMessage || "Generating your wrap…"}</span>
+                </div>
+              )}
+            </div>
+            <div className="flat-preview">
+              <div className="flat-preview-title">
+                <span>Print spread</span>
+                <small>Back · spine · front</small>
+              </div>
+              <div className="stage-labels">
+                <span>BACK</span>
+                <span>SPINE</span>
+                <span>FRONT</span>
+              </div>
+              <div className="stage-scroll">
+                <motion.div
+                  className={`cover-spread ${!ready ? "empty-spread" : ""} ${generatedUrl ? "has-art" : ""}`}
+                  style={{
+                    gridTemplateColumns: `${config.width}fr ${config.spine}fr ${config.width}fr`,
+                    aspectRatio: `${totalDisplay} / ${heightDisplay}`,
+                  }}
+                  layout
                 >
-                  {title && <span>{title}</span>}
-                </div>
-                <div className="book-3d-front">
-                  {coverUrl ? <img src={coverUrl} alt="Front cover on a 3D book" /> : <ImagePlus />}
-                </div>
-              </motion.div>
-              <p className="book-preview-caption">
-                {isBusy(status)
-                  ? statusMessage || "Generating your wrap…"
-                  : generatedUrl
-                    ? "Generated wrap on a 3D book"
-                    : coverUrl
-                      ? "Front cover ready to extend"
-                      : "Upload a front cover to preview the book"}
-              </p>
-            </div>
-            <div className="stage-labels">
-              <span>BACK</span>
-              <span>SPINE</span>
-              <span>FRONT</span>
-            </div>
-            <div className="stage-scroll">
-              <motion.div
-                className={`cover-spread ${!ready ? "empty-spread" : ""} ${generatedUrl ? "has-art" : ""}`}
-                style={{
-                  gridTemplateColumns: `${config.width}fr ${config.spine}fr ${config.width}fr`,
-                  aspectRatio: `${totalDisplay} / ${heightDisplay}`,
-                }}
-                layout
-              >
-                {generatedUrl && <img className="wrap-art" src={generatedUrl} alt="" />}
-              <div className="panel back-panel">
-                {ready ? (
-                  <>
-                    <p className="back-copy">{blurb}</p>
-                    <div className="back-reviews">
-                      {parseReviews(reviews).map((review) => (
-                        <blockquote key={review.quote}>
-                          <p>{review.quote}</p>
-                          {review.attribution && <cite>{review.attribution}</cite>}
-                        </blockquote>
-                      ))}
-                    </div>
-                    {isbn && (
-                      <div className="barcode">
-                        <span />
-                        <span />
-                        <span />
-                        <span />
-                        <span />
-                        <small>{isbn}</small>
+                  {generatedUrl && <img className="wrap-art" src={generatedUrl} alt="" />}
+                  <div className="panel back-panel">
+                    {ready ? (
+                      <>
+                        <p className="back-copy">{blurb}</p>
+                        <div className="back-reviews">
+                          {parseReviews(reviews).map((review) => (
+                            <blockquote key={review.quote}>
+                              <p>{review.quote}</p>
+                              {review.attribution && <cite>{review.attribution}</cite>}
+                            </blockquote>
+                          ))}
+                        </div>
+                        {isbn && (
+                          <div className="barcode">
+                            <span />
+                            <span />
+                            <span />
+                            <span />
+                            <span />
+                            <small>{isbn}</small>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="empty-copy">
+                        <ImagePlus />
+                        <strong>Spine + back</strong>
+                        <span>appear after generate</span>
                       </div>
                     )}
-                  </>
-                ) : (
-                  <div className="empty-copy">
-                    <ImagePlus />
-                    <strong>Spine + back</strong>
-                    <span>appear after generate</span>
                   </div>
-                )}
-              </div>
-              <div className="panel spine-panel">
-                {ready ? (
-                  <div className="spine-copy">
-                    <strong>{title}</strong>
-                    {author && <em>{author}</em>}
+                  <div className="panel spine-panel">
+                    {ready ? (
+                      <div className="spine-copy">
+                        <strong>{title}</strong>
+                        {author && <em>{author}</em>}
+                      </div>
+                    ) : (
+                      <span>SPINE</span>
+                    )}
                   </div>
-                ) : (
-                  <span>SPINE</span>
-                )}
-              </div>
-              <div className="panel front-panel">
-                {coverUrl ? (
-                  <img src={coverUrl} alt="Front cover preview" />
-                ) : (
-                  <div className="front-placeholder">
-                    <span>FRONT</span>
-                    <strong>
-                      Upload
-                      <br />
-                      cover
-                    </strong>
+                  <div className="panel front-panel">
+                    {coverUrl ? (
+                      <img src={coverUrl} alt="Front cover preview" />
+                    ) : (
+                      <div className="front-placeholder">
+                        <span>FRONT</span>
+                        <strong>
+                          Upload
+                          <br />
+                          cover
+                        </strong>
+                      </div>
+                    )}
                   </div>
-                )}
+                </motion.div>
               </div>
-              <i className="bleed-line" />
-              {isBusy(status) && (
-                <div className="job-overlay">
-                  <span className="job-orbit">
-                    <LoaderCircle />
-                  </span>
-                  <p>
-                    <small>LIVE · {selectedModel.name.toUpperCase()}</small>
-                    <strong>{statusMessage || "Working…"}</strong>
-                  </p>
-                </div>
-                )}
-              </motion.div>
             </div>
           </div>
         </section>
