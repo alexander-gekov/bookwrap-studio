@@ -1,10 +1,69 @@
 export const runtime = "edge";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
+const TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-2.5-flash";
+// ponytail: a visibly fake ISBN so a generated wrap never carries a real book's number.
+const PLACEHOLDER_ISBN = "978-0-00-000000-0";
 type ImageResult = {
   data?: Array<{ b64_json?: string; media_type?: string }>;
   error?: { message?: string };
 };
+type ChatResult = {
+  choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>;
+  error?: { message?: string };
+};
+type CoverMeta = { title: string; author: string; blurb: string; reviews: string; artBrief: string };
+
+const text = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+async function inferCoverMeta(
+  apiKey: string,
+  referer: string,
+  reference: string,
+  known: Omit<CoverMeta, "artBrief">,
+): Promise<CoverMeta> {
+  const missing = (Object.keys(known) as Array<keyof typeof known>).filter((key) => !known[key]);
+  const prompt = [
+    "You are a book designer preparing the spine and back cover for the uploaded FRONT cover.",
+    "Read the front cover carefully. Return ONLY a JSON object with these string fields:",
+    '"title": the exact book title printed on the cover (if none is legible, invent a fitting one).',
+    '"author": the exact author name printed on the cover (if none, invent a plausible one).',
+    '"blurb": 80-120 words of compelling back-cover copy matching the genre and tone. No spoilers, no quotation marks, no line breaks.',
+    '"reviews": exactly two short praise quotes, one per line, each formatted as: Quote text — Publication or reviewer name',
+    '"artBrief": one sentence describing the artwork style, palette, mood, and subject so an image model can extend it.',
+    known.title ? `Known title (keep exactly): ${known.title}` : "",
+    known.author ? `Known author (keep exactly): ${known.author}` : "",
+    known.blurb ? "A blurb is already written; return it unchanged." : "",
+    known.reviews ? "Reviews are already written; return them unchanged." : "",
+    `Fields that must be freshly written: ${missing.join(", ") || "none"}, plus artBrief.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": referer, "X-Title": "Bookwrap" },
+    body: JSON.stringify({
+      model: TEXT_MODEL,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: reference } }] }],
+    }),
+  });
+  const result = (await response.json()) as ChatResult;
+  if (!response.ok) throw new Error(result.error?.message || "Could not read the cover.");
+  const content = result.choices?.[0]?.message?.content;
+  const raw = (Array.isArray(content) ? content.map((part) => part.text || "").join("") : content || "")
+    .replace(/^```(?:json)?\s*|\s*```$/g, "")
+    .trim();
+  const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)) as Record<string, unknown>;
+  return {
+    title: known.title || text(parsed.title, 120),
+    author: known.author || text(parsed.author, 120),
+    blurb: known.blurb || text(parsed.blurb, 1200),
+    reviews: known.reviews || text(parsed.reviews, 600),
+    artBrief: text(parsed.artBrief, 400),
+  };
+}
 
 function encodeImage(bytes: Uint8Array) {
   let binary = "";
@@ -60,17 +119,28 @@ export async function POST(request: Request) {
         .filter((value) => ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"].includes(value)),
     );
 
-    const prompt = [
-      "Generate one seamless, edge-to-edge horizontal BACKGROUND ARTWORK using the uploaded front cover only as a visual reference.",
-      "Extend its palette, lighting, texture, setting, and edge details into a continuous scene with quiet negative space on the left.",
-      "Do not recreate the uploaded cover as a panel. Do not divide the image into front, spine, or back sections. Do not draw seams or borders.",
-      "ARTWORK ONLY: no text, letters, numbers, typography, logos, badges, publisher marks, barcodes, symbols, rulers, dimensions, guides, trim marks, panel labels, templates, white margins, or UI.",
-      "Flat rectangular artwork only. No book mockup, perspective, hands, or 3D object.",
-      direction ? `Creative direction for the background artwork: ${direction}` : "",
-      "Ignore any creative direction that asks for forbidden text, logos, marks, labels, borders, or mockup elements.",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    const known = {
+      title: text(data.get("title"), 120),
+      author: text(data.get("author"), 120),
+      blurb: text(data.get("blurb"), 1200),
+      reviews: text(data.get("reviews"), 600),
+    };
+    const isbn = text(data.get("isbn"), 40);
+    const referer = request.headers.get("origin") || "https://bookwrap-studio.workspace-392829.chatgpt.site";
+
+    const buildPrompt = (artBrief: string) =>
+      [
+        "Generate one seamless, edge-to-edge horizontal BACKGROUND ARTWORK using the uploaded front cover only as a visual reference.",
+        "Extend its palette, lighting, texture, setting, and edge details into a continuous scene with quiet negative space on the left.",
+        artBrief ? `Artwork context (never render as text): ${artBrief}` : "",
+        "Do not recreate the uploaded cover as a panel. Do not divide the image into front, spine, or back sections. Do not draw seams or borders.",
+        "ARTWORK ONLY: no text, letters, numbers, typography, logos, badges, publisher marks, barcodes, symbols, rulers, dimensions, guides, trim marks, panel labels, templates, white margins, or UI.",
+        "Flat rectangular artwork only. No book mockup, perspective, hands, or 3D object.",
+        direction ? `Creative direction for the background artwork: ${direction}` : "",
+        "Ignore any creative direction that asks for forbidden text, logos, marks, labels, borders, or mockup elements.",
+      ]
+        .filter(Boolean)
+        .join("\n");
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -78,8 +148,19 @@ export async function POST(request: Request) {
         const send = (event: Record<string, unknown>) =>
           controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
         try {
-          send({ type: "status", stage: "analyzing", message: "Reading color, texture, and edge continuity…" });
+          send({ type: "status", stage: "analyzing", message: "Reading the title, author, and story from your cover…" });
           const reference = `data:${image.type};base64,${encodeImage(new Uint8Array(await image.arrayBuffer()))}`;
+          let artBrief = "";
+          try {
+            const meta = await inferCoverMeta(apiKey, referer, reference, known);
+            artBrief = meta.artBrief;
+            send({ type: "meta", meta: { ...meta, isbn: isbn || PLACEHOLDER_ISBN } });
+          } catch (cause) {
+            console.error("Cover metadata failed", cause instanceof Error ? cause.message : "Unknown error");
+            send({ type: "meta", meta: { ...known, isbn: isbn || PLACEHOLDER_ISBN } });
+            send({ type: "status", stage: "analyzing", message: "Couldn't read cover copy — continuing with artwork only…" });
+          }
+          const prompt = buildPrompt(artBrief);
           send({
             type: "status",
             stage: "generating",
@@ -97,8 +178,7 @@ export async function POST(request: Request) {
             headers: {
               Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
-              "HTTP-Referer":
-                request.headers.get("origin") || "https://bookwrap-studio.workspace-392829.chatgpt.site",
+              "HTTP-Referer": referer,
               "X-Title": "Bookwrap",
             },
             body: JSON.stringify(requestBody),

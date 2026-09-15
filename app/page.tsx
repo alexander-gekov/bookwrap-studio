@@ -275,6 +275,11 @@ export default function Home() {
     const form = new FormData();
     form.append("image", coverFile);
     form.append("direction", direction);
+    form.append("title", title);
+    form.append("author", author);
+    form.append("blurb", blurb);
+    form.append("reviews", reviews);
+    form.append("isbn", isbn);
     form.append("apiKey", apiKey.trim());
     form.append("model", selectedModel.id);
     form.append("aspectRatios", selectedModel.aspectRatios.join(","));
@@ -309,10 +314,19 @@ export default function Home() {
             image?: string;
             format?: string;
             error?: string;
+            meta?: Partial<Record<"title" | "author" | "blurb" | "reviews" | "isbn", string>>;
           };
           if (event.type === "status" && event.stage) {
             setStatus(event.stage);
             setStatusMessage(event.message || "");
+          }
+          if (event.type === "meta" && event.meta) {
+            const meta = event.meta;
+            setTitle((value) => value || meta.title || "");
+            setAuthor((value) => value || meta.author || "");
+            setBlurb((value) => value || meta.blurb || "");
+            setReviews((value) => value || meta.reviews || "");
+            setIsbn((value) => value || meta.isbn || "");
           }
           if (event.type === "result" && event.image) {
             setStatus("compositing");
@@ -735,7 +749,7 @@ export default function Home() {
             <TabsContent value="simple" className="options-panel" asChild>
               <motion.div {...fadeUp}>
                 <p className="simple-note">
-                  Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Open Advanced for spine, bleed, and optional cover copy.
+                  Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Title, author, back-cover copy, reviews, and a placeholder barcode are read from your cover or drafted for you — edit any of them under Advanced.
                 </p>
               </motion.div>
             </TabsContent>
@@ -779,24 +793,24 @@ export default function Home() {
               <div className="copy-grid">
                 <div className="field-stack">
                   <Label>Book title</Label>
-                  <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Optional" />
+                  <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Read from cover" />
                 </div>
                 <div className="field-stack">
                   <Label>Author</Label>
-                  <Input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="Optional" />
+                  <Input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="Read from cover" />
                 </div>
                 <div className="field-stack full">
                   <Label>Back-cover copy</Label>
-                  <Textarea value={blurb} onChange={(event) => setBlurb(event.target.value)} rows={3} placeholder="Optional" />
+                  <Textarea value={blurb} onChange={(event) => setBlurb(event.target.value)} rows={3} placeholder="Drafted from your cover on generate" />
                 </div>
                 <div className="field-stack full">
                   <Label>Reviews</Label>
-                  <Textarea value={reviews} onChange={(event) => setReviews(event.target.value)} rows={3} placeholder="Optional" />
+                  <Textarea value={reviews} onChange={(event) => setReviews(event.target.value)} rows={3} placeholder="Drafted from your cover on generate" />
                   <small className="field-hint">One quote per line, ending with — Attribution</small>
                 </div>
                 <div className="field-stack">
                   <Label>ISBN</Label>
-                  <Input value={isbn} onChange={(event) => setIsbn(event.target.value)} placeholder="Optional" />
+                  <Input value={isbn} onChange={(event) => setIsbn(event.target.value)} placeholder="Placeholder barcode until set" />
                 </div>
                 <div className="field-stack full">
                   <Label>Art direction</Label>
