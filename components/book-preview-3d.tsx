@@ -39,8 +39,8 @@ function coverMaterial(color: number, map?: THREE.Texture | null) {
   return new THREE.MeshStandardMaterial({
     color: map ? 0xffffff : color,
     map: map || null,
-    roughness: 0.72,
-    metalness: 0,
+    roughness: 0.55,
+    metalness: 0.04,
   });
 }
 
@@ -78,6 +78,8 @@ export function BookPreview3D({
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.domElement.setAttribute("aria-label", "Interactive 3D book. Drag to rotate and pinch or scroll to zoom.");
@@ -126,6 +128,11 @@ export function BookPreview3D({
     controls.zoomSpeed = 0.8;
     controls.touches.ONE = THREE.TOUCH.ROTATE;
     controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+    controls.autoRotate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    controls.autoRotateSpeed = 0.9;
+    controls.addEventListener("start", () => {
+      controls.autoRotate = false;
+    });
 
     const resize = () => {
       const width = Math.max(1, mount.clientWidth);
