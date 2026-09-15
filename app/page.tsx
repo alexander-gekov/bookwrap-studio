@@ -105,23 +105,14 @@ function extendBleed(
   trimHeight: number,
 ) {
   if (bleed <= 0) return;
-  const trim = document.createElement("canvas");
-  trim.width = trimWidth;
-  trim.height = trimHeight;
-  const trimCtx = trim.getContext("2d");
-  if (!trimCtx) return;
-  trimCtx.drawImage(canvas, bleed, bleed, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(trim, 0, 0, trimWidth, trimHeight, bleed, bleed, trimWidth, trimHeight);
-  ctx.drawImage(trim, 0, 0, trimWidth, 1, bleed, 0, trimWidth, bleed);
-  ctx.drawImage(trim, 0, trimHeight - 1, trimWidth, 1, bleed, bleed + trimHeight, trimWidth, bleed);
-  ctx.drawImage(trim, 0, 0, 1, trimHeight, 0, bleed, bleed, trimHeight);
-  ctx.drawImage(trim, trimWidth - 1, 0, 1, trimHeight, bleed + trimWidth, bleed, bleed, trimHeight);
-  ctx.drawImage(trim, 0, 0, 1, 1, 0, 0, bleed, bleed);
-  ctx.drawImage(trim, trimWidth - 1, 0, 1, 1, bleed + trimWidth, 0, bleed, bleed);
-  ctx.drawImage(trim, 0, trimHeight - 1, 1, 1, 0, bleed + trimHeight, bleed, bleed);
-  ctx.drawImage(trim, trimWidth - 1, trimHeight - 1, 1, 1, bleed + trimWidth, bleed + trimHeight, bleed, bleed);
+  ctx.drawImage(canvas, bleed, bleed, trimWidth, 1, bleed, 0, trimWidth, bleed);
+  ctx.drawImage(canvas, bleed, bleed + trimHeight - 1, trimWidth, 1, bleed, bleed + trimHeight, trimWidth, bleed);
+  ctx.drawImage(canvas, bleed, bleed, 1, trimHeight, 0, bleed, bleed, trimHeight);
+  ctx.drawImage(canvas, bleed + trimWidth - 1, bleed, 1, trimHeight, bleed + trimWidth, bleed, bleed, trimHeight);
+  ctx.drawImage(canvas, bleed, bleed, 1, 1, 0, 0, bleed, bleed);
+  ctx.drawImage(canvas, bleed + trimWidth - 1, bleed, 1, 1, bleed + trimWidth, 0, bleed, bleed);
+  ctx.drawImage(canvas, bleed, bleed + trimHeight - 1, 1, 1, 0, bleed + trimHeight, bleed, bleed);
+  ctx.drawImage(canvas, bleed + trimWidth - 1, bleed + trimHeight - 1, 1, 1, bleed + trimWidth, bleed + trimHeight, bleed, bleed);
 }
 
 export default function Home() {
