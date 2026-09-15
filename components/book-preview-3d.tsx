@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
@@ -52,7 +52,7 @@ export function BookPreview3D({
   spineWidth,
 }: BookPreview3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState("");
+  const hintRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -69,7 +69,10 @@ export function BookPreview3D({
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     } catch {
-      setError("3D preview is unavailable in this browser.");
+      if (hintRef.current) {
+        hintRef.current.className = "three-book-error";
+        hintRef.current.textContent = "3D preview is unavailable in this browser.";
+      }
       return;
     }
 
@@ -187,7 +190,7 @@ export function BookPreview3D({
   return (
     <div className="three-book-shell">
       <div ref={mountRef} className="three-book-canvas" />
-      {error ? <p className="three-book-error">{error}</p> : <p className="three-book-hint">Drag to rotate · Pinch or scroll to zoom</p>}
+      <p ref={hintRef} className="three-book-hint">Drag to rotate · Pinch or scroll to zoom</p>
     </div>
   );
 }

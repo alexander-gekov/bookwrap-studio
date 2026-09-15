@@ -438,7 +438,7 @@ export default function Home() {
     }
 
     return canvas;
-  }, [author, blurb, config.dpi, coverUrl, dims, generatedUrl, isbn, reviews, title]);
+  }, [author, blurb, coverUrl, dims, generatedUrl, isbn, reviews, title]);
 
   const download = async (part: "wrap" | "front" | "spine" | "back") => {
     const source = await compose();

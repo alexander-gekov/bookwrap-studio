@@ -145,7 +145,10 @@ export function ModelPicker({ value, onChange }: { value: ImageModel; onChange: 
     : providers[0]?.id;
   const visibleModels = filteredModels.filter((model) => model.providerId === activeProvider);
 
-  return <Popover open={open} onOpenChange={setOpen}>
+  return <Popover open={open} onOpenChange={(nextOpen) => {
+    setOpen(nextOpen);
+    if (nextOpen) setSelectedProvider(value.providerId);
+  }}>
     <PopoverTrigger asChild>
       <button className="model-trigger" type="button" aria-label="Choose image model">
         <ProviderLogo providerId={value.providerId} providerName={value.providerName} compact />
