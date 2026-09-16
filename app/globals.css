@@ -413,11 +413,12 @@ html, body { overflow-x: hidden; }
   min-width: min(100%, 560px);
 }
 .stage-labels {
-  display: grid; grid-template-columns: 1fr auto 1fr;
+  display: grid;
   margin: 0 2% 10px; font-size: 11px; font-weight: 500;
   letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.62);
 }
-.stage-labels span:nth-child(2) { padding: 0 16px; }
+.stage-labels span { text-align: center; }
+.stage-labels span:first-child { text-align: left; }
 .stage-labels span:last-child { text-align: right; }
 
 .cover-spread {
@@ -445,7 +446,9 @@ html, body { overflow-x: hidden; }
 .cover-spread.has-art .back-copy,
 .cover-spread.has-art .back-reviews,
 .cover-spread.has-art .spine-copy,
-.cover-spread.has-art .barcode { display: none; }
+.cover-spread.has-art .barcode,
+.cover-spread.has-art .flap-panel small,
+.cover-spread.has-art .flap-panel p { display: none; }
 .back-copy {
   margin: 0; max-width: 92%;
   font: 500 clamp(10px, 1.2vw, 16px) / 1.45 Georgia, serif;
@@ -505,6 +508,32 @@ html, body { overflow-x: hidden; }
 .empty-copy { justify-content: center; color: rgba(255, 255, 255, 0.62); }
 .empty-copy svg, .front-placeholder span { opacity: 0.8; }
 .front-placeholder strong, .empty-copy strong { font-size: 18px; letter-spacing: -0.02em; color: #fff; }
+.cover-spread.is-jacket { min-width: min(100%, 720px); }
+.flap-panel {
+  background: linear-gradient(160deg, #152330, #0d171f);
+  padding: 8%; color: #fffdf4;
+}
+.flap-panel small {
+  display: block; margin-bottom: 7px;
+  font-size: 8px; font-weight: 800; letter-spacing: 0.12em;
+  text-transform: uppercase; color: #f7ff70;
+}
+.flap-panel p { margin: 0; font: 500 clamp(8px, 0.85vw, 13px) / 1.45 Georgia, serif; }
+.cover-spread.has-art .flap-panel {
+  background: transparent; box-shadow: none;
+}
+.fold-guide {
+  position: absolute; top: 0; bottom: 0; width: 0;
+  border-left: 1px dashed rgba(247, 255, 112, 0.88);
+  z-index: 4; pointer-events: none;
+}
+.fold-guide b {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font: 800 6px / 1 Inter, Arial, sans-serif;
+  letter-spacing: 0.14em; color: #f7ff70; text-shadow: 0 1px 5px #111;
+}
+.fold-guide b:first-child { top: 4px; }
+.fold-guide b:last-child { bottom: 4px; }
 
 .three-preview { position: relative; }
 .three-book-shell {

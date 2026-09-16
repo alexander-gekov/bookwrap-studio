@@ -12,7 +12,7 @@ type ChatResult = {
   choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>;
   error?: { message?: string };
 };
-type CoverMeta = { title: string; author: string; blurb: string; reviews: string; artBrief: string };
+type CoverMeta = { title: string; author: string; blurb: string; bio: string; reviews: string; artBrief: string };
 
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
@@ -28,12 +28,14 @@ async function inferCoverMeta(
     "Read the front cover carefully. Return ONLY a JSON object with these string fields:",
     '"title": the exact book title printed on the cover (if none is legible, invent a fitting one).',
     '"author": the exact author name printed on the cover (if none, invent a plausible one).',
-    '"blurb": 45-70 words of compelling back-cover copy matching the genre and tone, in 2-3 short sentences. No spoilers, no quotation marks, no line breaks.',
+    '"blurb": 45-70 words of compelling synopsis matching the genre and tone, in 2-3 short sentences. No spoilers, no quotation marks, no line breaks.',
+    '"bio": 40-60 words about the author in a trade-jacket voice. No line breaks.',
     '"reviews": exactly two praise quotes of at most 10 words each, one per line, each formatted as: Quote text — Publication or reviewer name',
     '"artBrief": one sentence describing the artwork style, palette, mood, and subject so an image model can extend it.',
     known.title ? `Known title (keep exactly): ${known.title}` : "",
     known.author ? `Known author (keep exactly): ${known.author}` : "",
     known.blurb ? "A blurb is already written; return it unchanged." : "",
+    known.bio ? "A bio is already written; return it unchanged." : "",
     known.reviews ? "Reviews are already written; return them unchanged." : "",
     `Fields that must be freshly written: ${missing.join(", ") || "none"}, plus artBrief.`,
   ]
@@ -60,6 +62,7 @@ async function inferCoverMeta(
     title: known.title || text(parsed.title, 120),
     author: known.author || text(parsed.author, 120),
     blurb: known.blurb || text(parsed.blurb, 1200),
+    bio: known.bio || text(parsed.bio, 800),
     reviews: known.reviews || text(parsed.reviews, 600),
     artBrief: text(parsed.artBrief, 400),
   };
@@ -73,8 +76,8 @@ function encodeImage(bytes: Uint8Array) {
   return btoa(binary);
 }
 
-function pickAspectRatio(width: number, height: number, spine: number) {
-  const wrapRatio = (width * 2 + spine) / Math.max(height, 0.01);
+function pickAspectRatio(width: number, height: number, spine: number, extra = 0) {
+  const wrapRatio = (width * 2 + spine + extra) / Math.max(height, 0.01);
   if (wrapRatio >= 1.65) return "16:9";
   if (wrapRatio >= 1.42) return "3:2";
   if (wrapRatio >= 1.2) return "4:3";
@@ -109,10 +112,16 @@ export async function POST(request: Request) {
     const width = Number(data.get("width"));
     const height = Number(data.get("height"));
     const spine = Number(data.get("spine"));
+    const format = String(data.get("format") || "jacket") === "wrap" ? "wrap" : "jacket";
+    const flap = Number(data.get("flap") || 3.25);
     if (![width, height, spine].every((value) => Number.isFinite(value) && value > 0)) {
       return Response.json({ error: "Cover dimensions must be positive numbers." }, { status: 400 });
     }
-    const aspectRatio = pickAspectRatio(width, height, spine);
+    if (format === "jacket" && !(Number.isFinite(flap) && flap >= 0.5)) {
+      return Response.json({ error: "Jacket flap width must be at least 0.5." }, { status: 400 });
+    }
+    const flapW = format === "jacket" ? flap : 0;
+    const aspectRatio = pickAspectRatio(width, height, spine, flapW * 2);
     const supportedAspectRatios = new Set(
       String(data.get("aspectRatios") || "")
         .split(",")
@@ -123,12 +132,13 @@ export async function POST(request: Request) {
       title: text(data.get("title"), 120),
       author: text(data.get("author"), 120),
       blurb: text(data.get("blurb"), 1200),
+      bio: text(data.get("bio"), 800),
       reviews: text(data.get("reviews"), 600),
     };
     const isbn = text(data.get("isbn"), 40);
     const referer = request.headers.get("origin") || "https://bookwrap-studio.workspace-392829.chatgpt.site";
 
-    const total = width * 2 + spine;
+    const total = width * 2 + spine + flapW * 2;
     const pct = (value: number) => `${Math.round((value / total) * 100)}%`;
     const buildPrompt = (meta: CoverMeta, barcode: string) => {
       const reviews = meta.reviews
@@ -138,12 +148,19 @@ export async function POST(request: Request) {
         .slice(0, 2);
       return [
         "Design the complete flat print wrap for this book as ONE image, laid out left to right with these exact shares of the width:",
-        `BACK COVER = left ${pct(width)}, SPINE = middle ${pct(spine)}, FRONT COVER = right ${pct(width)}. No seams, borders, gaps, or labels between panels.`,
-        "FRONT (right): reproduce the uploaded front cover faithfully, edge to edge, exactly as designed.",
-        `SPINE (middle): the title "${meta.title}"${meta.author ? ` and the author "${meta.author}"` : ""}, rotated to read top-to-bottom, centred, in the SAME typeface, weight, letter-spacing, and colour treatment as the front cover title.`,
-        "BACK (left): continue the front cover's artwork, palette, texture, and lighting into a calmer background that gives the copy room, then typeset this copy in typography that matches the front cover, large and clear enough to read in print:",
-        meta.blurb ? `Description: "${meta.blurb}"` : "",
+        format === "jacket"
+          ? `BACK FLAP = left ${pct(flapW)}, BACK COVER = next ${pct(width)}, SPINE = ${pct(spine)}, FRONT COVER = ${pct(width)}, FRONT FLAP = right ${pct(flapW)}. No seams, borders, gaps, or labels between panels.`
+          : `BACK COVER = left ${pct(width)}, SPINE = middle ${pct(spine)}, FRONT COVER = right ${pct(width)}. No seams, borders, gaps, or labels between panels.`,
+        "FRONT: reproduce the uploaded front cover faithfully, edge to edge, exactly as designed.",
+        `SPINE: the title "${meta.title}"${meta.author ? ` and the author "${meta.author}"` : ""}, rotated to read top-to-bottom, centred, in the SAME typeface, weight, letter-spacing, and colour treatment as the front cover title.`,
+        format === "jacket"
+          ? "BACK COVER: continue the front cover's artwork into a calmer background, then typeset this copy in typography that matches the front cover, large and clear enough to read in print:"
+          : "BACK (left): continue the front cover's artwork, palette, texture, and lighting into a calmer background that gives the copy room, then typeset this copy in typography that matches the front cover, large and clear enough to read in print:",
+        format === "jacket" ? "" : meta.blurb ? `Description: "${meta.blurb}"` : "",
         ...reviews.map((review) => `Praise: ${review}`),
+        format === "jacket" && meta.blurb ? `FRONT FLAP: typeset this synopsis: "${meta.blurb}"` : "",
+        format === "jacket" && meta.bio ? `BACK FLAP: typeset this author biography: "${meta.bio}"` : "",
+        format === "jacket" && !meta.bio ? "BACK FLAP: typeset a short author biography matching the book's tone." : "",
         `In the bottom-left corner of the back cover, on a solid white rectangle about 30% of the back's width and 12% of its height, draw a standard vertical-bar retail barcode with the number "${barcode}" printed underneath it in a small monospace font.${meta.artBrief ? ` Art context: ${meta.artBrief}` : ""}`,
         "Rules: spell every word exactly as given, in the given order, with nothing added; no lorem ipsum, no invented text, no publisher logos, no price, no rulers, dimensions, guides, trim marks, panel labels, or templates.",
         "Flat, print-ready, straight-on. No book mockup, perspective, shadows, hands, or 3D object.",
