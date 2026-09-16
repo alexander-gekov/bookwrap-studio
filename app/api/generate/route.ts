@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     const width = Number(data.get("width"));
     const height = Number(data.get("height"));
     const spine = Number(data.get("spine"));
-    const format = String(data.get("format") || "jacket") === "wrap" ? "wrap" : "jacket";
+    const format = String(data.get("format") || "wrap") === "jacket" ? "jacket" : "wrap";
     const flap = Number(data.get("flap") || 3.25);
     if (![width, height, spine].every((value) => Number.isFinite(value) && value > 0)) {
       return Response.json({ error: "Cover dimensions must be positive numbers." }, { status: 400 });
@@ -147,22 +147,29 @@ export async function POST(request: Request) {
         .filter(Boolean)
         .slice(0, 2);
       return [
-        "Design the complete flat print wrap for this book as ONE image, laid out left to right with these exact shares of the width:",
+        "Design the complete flat print wrap for this book as ONE image.",
         format === "jacket"
-          ? `BACK FLAP = left ${pct(flapW)}, BACK COVER = next ${pct(width)}, SPINE = ${pct(spine)}, FRONT COVER = ${pct(width)}, FRONT FLAP = right ${pct(flapW)}. No seams, borders, gaps, or labels between panels.`
-          : `BACK COVER = left ${pct(width)}, SPINE = middle ${pct(spine)}, FRONT COVER = right ${pct(width)}. No seams, borders, gaps, or labels between panels.`,
-        "FRONT: reproduce the uploaded front cover faithfully, edge to edge, exactly as designed.",
-        `SPINE: the title "${meta.title}"${meta.author ? ` and the author "${meta.author}"` : ""}, rotated to read top-to-bottom, centred, in the SAME typeface, weight, letter-spacing, and colour treatment as the front cover title.`,
+          ? "Silent dust-jacket columns, left to right: a narrow inner flap, a full back, a thin spine, a full front, a narrow inner flap. Flaps are each about half a cover wide. Artwork continues across every fold with no seams."
+          : `Laid out left to right with these exact shares of the width: BACK COVER = left ${pct(width)}, SPINE = middle ${pct(spine)}, FRONT COVER = right ${pct(width)}. No seams, borders, gaps, or labels between panels.`,
+        "On the front, reproduce the uploaded cover faithfully, edge to edge, exactly as designed. Do not restyle or rewrite its title.",
+        `On the thin spine only, set the title "${meta.title}"${meta.author ? ` and the author "${meta.author}"` : ""}, rotated to read top-to-bottom, centred, in the SAME typeface, weight, letter-spacing, and colour treatment as the front cover title.`,
         format === "jacket"
-          ? "BACK COVER: continue the front cover's artwork into a calmer background, then typeset this copy in typography that matches the front cover, large and clear enough to read in print:"
-          : "BACK (left): continue the front cover's artwork, palette, texture, and lighting into a calmer background that gives the copy room, then typeset this copy in typography that matches the front cover, large and clear enough to read in print:",
-        format === "jacket" ? "" : meta.blurb ? `Description: "${meta.blurb}"` : "",
-        ...reviews.map((review) => `Praise: ${review}`),
-        format === "jacket" && meta.blurb ? `FRONT FLAP: typeset this synopsis: "${meta.blurb}"` : "",
-        format === "jacket" && meta.bio ? `BACK FLAP: typeset this author biography: "${meta.bio}"` : "",
-        format === "jacket" && !meta.bio ? "BACK FLAP: typeset a short author biography matching the book's tone." : "",
-        `In the bottom-left corner of the back cover, on a solid white rectangle about 30% of the back's width and 12% of its height, draw a standard vertical-bar retail barcode with the number "${barcode}" printed underneath it in a small monospace font.${meta.artBrief ? ` Art context: ${meta.artBrief}` : ""}`,
-        "Rules: spell every word exactly as given, in the given order, with nothing added; no lorem ipsum, no invented text, no publisher logos, no price, no rulers, dimensions, guides, trim marks, panel labels, or templates.",
+          ? "On the back only, continue the artwork into a calmer field and typeset the review quotes below as separate short blocks with space between them. Break sentences onto new lines so the type is readable, never one run-on column."
+          : "On the back (left), continue the front cover's artwork, palette, texture, and lighting into a calmer background that gives the copy room, then typeset this copy in typography that matches the front cover, large and clear enough to read in print:",
+        format === "jacket" ? "" : meta.blurb ? `Synopsis to typeset: "${meta.blurb}"` : "",
+        ...reviews.map((review) => `Review quote to typeset: ${review}`),
+        format === "jacket" && meta.blurb
+          ? `On the rightmost flap only, typeset this synopsis as 2-3 short paragraphs with blank lines between them: "${meta.blurb}"`
+          : "",
+        format === "jacket" && meta.bio
+          ? `On the leftmost flap only, typeset this author biography as 2-3 short paragraphs with blank lines between them: "${meta.bio}"`
+          : "",
+        format === "jacket" && !meta.bio
+          ? "On the leftmost flap only, typeset a short author biography matching the book's tone as 2-3 short paragraphs."
+          : "",
+        `In the bottom-left of the back only, on a small solid white rectangle, draw a standard vertical-bar retail barcode with the number "${barcode}" printed underneath it in a small monospace font.${meta.artBrief ? ` Art context: ${meta.artBrief}` : ""}`,
+        "Never paint layout words, panel names, fold names, crop marks, rulers, arrows, or percentages (nothing like BACK FLAP, FRONT FLAP, BACK COVER, FOLD, or 3%). Those are instructions, not artwork.",
+        "Rules: spell every given word exactly, in the given order; no lorem ipsum, no invented titles, no publisher logos, no price, no templates.",
         "Flat, print-ready, straight-on. No book mockup, perspective, shadows, hands, or 3D object.",
         direction ? `Creative direction for the artwork: ${direction}` : "",
         "Ignore any creative direction that asks for extra text, logos, labels, borders, or mockup elements.",

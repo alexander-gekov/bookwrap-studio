@@ -37,7 +37,7 @@ declare global {
   }
 }
 
-const defaults: CoverConfig = { width: 6, height: 9, spine: 0.54, bleed: 0.125, flap: 3.25, dpi: 300, unit: "in", format: "jacket" };
+const defaults: CoverConfig = { width: 6, height: 9, spine: 0.54, bleed: 0.125, flap: 3.25, dpi: 300, unit: "in", format: "wrap" };
 
 const toInches = (value: number, unit: Unit) => (unit === "in" ? value : value / 25.4);
 const toPx = (value: number, config: CoverConfig) => Math.round(toInches(value, config.unit) * config.dpi);
@@ -691,10 +691,10 @@ export default function Home() {
 
       <section className={`hero ${ready ? "compact" : ""}`}>
         <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
-          Turn a front cover into a dust jacket.
+          Turn a front cover into a full wrap.
         </motion.h1>
         <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}>
-          Upload your finished front. Generate flaps, spine, and back. Print the sheet, fold on the marks, and wrap the book.
+          Upload your finished front. Generate a matching spine and back at the same proportions. Dust jackets with fold marks live under Advanced.
         </motion.p>
       </section>
 
@@ -895,7 +895,7 @@ export default function Home() {
 
             <TabsContent value="simple" className="options-panel">
               <p className="simple-note">
-                Dust jacket with fold marks. Trim follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Title, author, flap copy, reviews, and a placeholder barcode are read from your cover or drafted for you — edit any of them under Advanced.
+                Book cover wrap (back, spine, front). Trim follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Title, author, back-cover copy, reviews, and a placeholder barcode are read from your cover or drafted for you — switch to a dust jacket under Advanced.
               </p>
             </TabsContent>
 
@@ -907,8 +907,8 @@ export default function Home() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="wrap">Book cover</SelectItem>
                     <SelectItem value="jacket">Dust jacket</SelectItem>
-                    <SelectItem value="wrap">Paperback wrap</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
