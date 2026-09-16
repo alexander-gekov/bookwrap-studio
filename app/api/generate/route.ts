@@ -38,19 +38,27 @@ export async function POST(request: Request) {
     const isbn = String(data.get("isbn") || "").slice(0, 32);
     const direction = String(data.get("direction") || "").slice(0, 1200);
     const width = Number(data.get("width")), height = Number(data.get("height")), spine = Number(data.get("spine"));
+    const flap = Number(data.get("flap")) || 3.25;
+    const jacket = data.get("format") === "jacket";
     const unit = data.get("unit") === "mm" ? "millimeters" : "inches";
     const prompt = [
-      "Create one seamless, landscape, full-wrap book-cover artwork using the uploaded FRONT cover as the strict visual reference.",
-      "Layout from left to right: BACK COVER, narrow SPINE, FRONT COVER. Continue the same scene, palette, lighting, texture, technique, grain, and edge details across all three areas.",
-      `Physical layout: each cover panel is ${width} × ${height} ${unit}; spine is ${spine} ${unit}. The front panel belongs on the RIGHT.`,
+      "Create one seamless, landscape, print-flat book-cover artwork using the uploaded FRONT cover as the strict visual reference.",
+      jacket
+        ? "Layout from left to right: BACK FLAP, BACK COVER, SPINE, FRONT COVER, FRONT FLAP. This is a dust jacket that will be printed, folded, and wrapped around a hardcover."
+        : "Layout from left to right: BACK COVER, narrow SPINE, FRONT COVER.",
+      jacket
+        ? `Physical layout: flaps ${flap} ${unit}; covers ${width} × ${height} ${unit}; spine ${spine} ${unit}. Front cover is the panel just left of the right flap.`
+        : `Physical layout: each cover panel is ${width} × ${height} ${unit}; spine is ${spine} ${unit}. The front panel belongs on the RIGHT.`,
       `Book: ${JSON.stringify(title)}${author ? ` by ${JSON.stringify(author)}` : ""}.`,
-      "FRONT (right): Keep the uploaded cover recognizable. Do not restyle or rewrite its existing title treatment.",
-      "SPINE (center): Paint large, confident, print-scale typography — title and author — using the same type family, weight, tracking, and color language as the front. The letters should fill most of the spine width, like a real hardcover, not caption-sized or hairline type.",
-      "BACK (left): Finish it like a real trade-paperback back. Include:",
-      blurb ? `a short synopsis: ${JSON.stringify(blurb)}` : "a short synopsis in the upper half,",
-      reviews ? `two or three review pull-quotes: ${JSON.stringify(reviews)}` : "two or three short review pull-quotes with attributions (newspapers or magazines),",
-      isbn ? `an ISBN barcode using ${JSON.stringify(isbn)} in the lower-left, with the digits printed under the bars.` : "an ISBN barcode in the lower-left.",
-      "Keep back typography large enough to read, with generous margins. No mockup perspective, hands, or 3D book. Flat print artwork, viewed straight-on.",
+      "FRONT COVER: Keep the uploaded cover recognizable. Do not restyle or rewrite its existing title treatment.",
+      "SPINE: Paint large, confident, print-scale typography — title and author — using the same type family, weight, tracking, and color language as the front. Fill most of the spine width.",
+      jacket
+        ? "BACK COVER: Reviews and an ISBN barcode. FRONT FLAP: the synopsis. BACK FLAP: a short author biography. Continue the scene onto both flaps, a little calmer, with room for type. Do not draw fold lines, crop marks, or a 3D book — those are added in print."
+        : "BACK: Finish it like a real trade-paperback back.",
+      blurb ? `Synopsis: ${JSON.stringify(blurb)}` : "",
+      reviews ? `Review pull-quotes: ${JSON.stringify(reviews)}` : "Include two or three short review pull-quotes with attributions.",
+      isbn ? `ISBN barcode: ${JSON.stringify(isbn)} with digits under the bars.` : "Include an ISBN barcode.",
+      "Keep typography large enough to read. Flat print artwork, viewed straight-on. No mockup perspective or hands.",
       direction ? `Creative direction: ${direction}` : "",
     ].filter(Boolean).join("\n");
 

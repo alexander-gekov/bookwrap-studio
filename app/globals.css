@@ -27,3 +27,13 @@
 .spine-copy{position:absolute;left:50%;top:50%;display:flex;flex-direction:row;align-items:center;gap:14px;transform:translate(-50%,-50%) rotate(90deg);white-space:nowrap;color:#fffdf4;text-shadow:0 1px 10px rgba(0,0,0,.55)}
 .spine-copy strong{font-size:clamp(18px,2.8vw,36px);font-weight:800;letter-spacing:.18em;text-transform:uppercase;line-height:1}
 .spine-copy em{font-size:clamp(11px,1.15vw,16px);font-style:normal;font-weight:600;letter-spacing:.22em;text-transform:uppercase;opacity:.82}
+.cover-spread.is-jacket{max-width:1180px}
+.flap-panel{background:linear-gradient(160deg,#152330,#0d171f);padding:8%;color:#fffdf4}
+.flap-panel small{display:block;margin-bottom:7px;font-size:8px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#f7ff70}
+.flap-panel p{margin:0;font:500 clamp(8px,.85vw,13px)/1.45 Georgia,serif}
+.cover-spread.has-art .flap-panel{background:linear-gradient(180deg,rgba(8,14,21,.4),rgba(8,14,21,.5))}
+.fold-guide{position:absolute;top:0;bottom:0;width:0;border-left:1px dashed rgba(247,255,112,.88);z-index:4;pointer-events:none}
+.fold-guide b{position:absolute;left:50%;transform:translateX(-50%);font:800 6px/1 Arial,sans-serif;letter-spacing:.14em;color:#f7ff70;text-shadow:0 1px 5px #111}
+.fold-guide b:first-child{top:4px}
+.fold-guide b:last-child{bottom:4px}
+.stage-labels .label-end{text-align:right}
