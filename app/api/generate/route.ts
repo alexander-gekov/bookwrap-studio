@@ -14,8 +14,9 @@ function encodeImage(bytes: Uint8Array) {
   return btoa(binary);
 }
 
-function pickAspectRatio(width: number, height: number, spine: number) {
-  const wrapRatio = (width * 2 + spine) / Math.max(height, 0.01);
+function pickAspectRatio(width: number, height: number, spine: number, flaps = 0) {
+  const wrapRatio = (width * 2 + spine + flaps * 2) / Math.max(height, 0.01);
+  if (wrapRatio >= 2) return "21:9";
   if (wrapRatio >= 1.65) return "16:9";
   if (wrapRatio >= 1.42) return "3:2";
   if (wrapRatio >= 1.2) return "4:3";
@@ -49,18 +50,22 @@ export async function POST(request: Request) {
     const title = String(data.get("title") || "").slice(0, 180);
     const author = String(data.get("author") || "").slice(0, 180);
     const blurb = String(data.get("blurb") || "").slice(0, 800);
+    const bio = String(data.get("bio") || "").slice(0, 800);
     const reviews = String(data.get("reviews") || "").slice(0, 800);
     const isbn = String(data.get("isbn") || "").slice(0, 32);
     const direction = String(data.get("direction") || "").slice(0, 1200);
     const width = Number(data.get("width"));
     const height = Number(data.get("height"));
     const spine = Number(data.get("spine"));
+    const flap = Number(data.get("flap"));
+    const jacket = data.get("format") === "jacket";
     const aspect = Number(data.get("aspect"));
     if (![width, height, spine].every((value) => Number.isFinite(value) && value > 0)) {
       return Response.json({ error: "Cover dimensions must be positive numbers." }, { status: 400 });
     }
+    const flapWidth = jacket && Number.isFinite(flap) && flap > 0 ? flap : 0;
     const unit = data.get("unit") === "mm" ? "millimeters" : "inches";
-    const aspectRatio = pickAspectRatio(width, height, spine);
+    const aspectRatio = pickAspectRatio(width, height, spine, flapWidth);
     const panelRatio = Number.isFinite(aspect) && aspect > 0 ? aspect : width / Math.max(height, 0.01);
     const supportedAspectRatios = new Set(
       String(data.get("aspectRatios") || "")
@@ -69,20 +74,27 @@ export async function POST(request: Request) {
     );
 
     const prompt = [
-      "Create one seamless landscape full-wrap book cover using the uploaded FRONT cover as the strict visual reference.",
-      "Layout left to right: BACK COVER | SPINE | FRONT COVER. The three panels must feel like one continuous design.",
-      `Each cover panel uses the uploaded front's proportions (about ${panelRatio.toFixed(3)} width:height). Physical sizes: panel ${width} × ${height} ${unit}, spine ${spine} ${unit}. Front is on the RIGHT.`,
-      "Critical continuity: colors, lighting, texture, and edge detail at the spine/front join must match the left edge of the uploaded front so the wrap reads as one piece.",
+      "Create one seamless landscape print-flat book cover using the uploaded FRONT cover as the strict visual reference.",
+      jacket
+        ? "Layout left to right: BACK FLAP | BACK COVER | SPINE | FRONT COVER | FRONT FLAP. This is a dust jacket that will be printed, folded, and wrapped around a hardcover."
+        : "Layout left to right: BACK COVER | SPINE | FRONT COVER. The three panels must feel like one continuous design.",
+      jacket
+        ? `Cover panels use the uploaded front's proportions (about ${panelRatio.toFixed(3)} width:height). Physical sizes: flaps ${flapWidth} ${unit}, covers ${width} × ${height} ${unit}, spine ${spine} ${unit}. Front cover sits just left of the right flap.`
+        : `Each cover panel uses the uploaded front's proportions (about ${panelRatio.toFixed(3)} width:height). Physical sizes: panel ${width} × ${height} ${unit}, spine ${spine} ${unit}. Front is on the RIGHT.`,
+      "Critical continuity: colors, lighting, texture, and edge detail at each fold must match so the jacket reads as one piece.",
       title || author ? `Book: ${JSON.stringify(title)}${author ? ` by ${JSON.stringify(author)}` : ""}.` : "",
-      "FRONT (right): Keep the uploaded cover recognizable. Do not restyle or rewrite its existing title treatment.",
+      "FRONT COVER: Keep the uploaded cover recognizable. Do not restyle or rewrite its existing title treatment.",
       title || author
-        ? "SPINE (center): Set the supplied title and author using the same type family, weight, tracking, and color language as the front."
-        : "SPINE (center): Continue the artwork without inventing title or author text.",
-      "BACK (left): Finish like a real trade-paperback back while preserving clear, usable composition.",
-      blurb ? `Set this synopsis: ${JSON.stringify(blurb)}.` : "Do not invent synopsis copy.",
-      reviews ? `Set these review quotes: ${JSON.stringify(reviews)}.` : "Do not invent review quotes.",
+        ? "SPINE: Set the supplied title and author using the same type family, weight, tracking, and color language as the front."
+        : "SPINE: Continue the artwork without inventing title or author text.",
+      jacket
+        ? "BACK COVER: Reviews and optional ISBN. FRONT FLAP: the synopsis. BACK FLAP: a short author biography. Continue the scene onto both flaps, calmer, with room for type. Do not draw fold lines or crop marks."
+        : "BACK: Finish like a real trade-paperback back while preserving clear, usable composition.",
+      blurb ? `Synopsis: ${JSON.stringify(blurb)}.` : "Do not invent synopsis copy.",
+      jacket && bio ? `Author biography for the back flap: ${JSON.stringify(bio)}.` : "",
+      reviews ? `Review quotes: ${JSON.stringify(reviews)}.` : "Do not invent review quotes.",
       isbn
-        ? `Add an ISBN barcode using ${JSON.stringify(isbn)} in the lower-left, with digits under the bars.`
+        ? `Add an ISBN barcode using ${JSON.stringify(isbn)} on the back, with digits under the bars.`
         : "Do not add an ISBN or barcode.",
       "Flat print artwork only. No mockup perspective, hands, or 3D book.",
       direction ? `Creative direction: ${direction}` : "",
