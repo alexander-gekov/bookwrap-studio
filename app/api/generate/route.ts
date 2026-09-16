@@ -1,10 +1,69 @@
 export const runtime = "edge";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
+const TEXT_MODEL = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-2.5-flash";
+// ponytail: a visibly fake ISBN so a generated wrap never carries a real book's number.
+const PLACEHOLDER_ISBN = "978-0-00-000000-0";
 type ImageResult = {
   data?: Array<{ b64_json?: string; media_type?: string }>;
   error?: { message?: string };
 };
+type ChatResult = {
+  choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>;
+  error?: { message?: string };
+};
+type CoverMeta = { title: string; author: string; blurb: string; reviews: string; artBrief: string };
+
+const text = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+async function inferCoverMeta(
+  apiKey: string,
+  referer: string,
+  reference: string,
+  known: Omit<CoverMeta, "artBrief">,
+): Promise<CoverMeta> {
+  const missing = (Object.keys(known) as Array<keyof typeof known>).filter((key) => !known[key]);
+  const prompt = [
+    "You are a book designer preparing the spine and back cover for the uploaded FRONT cover.",
+    "Read the front cover carefully. Return ONLY a JSON object with these string fields:",
+    '"title": the exact book title printed on the cover (if none is legible, invent a fitting one).',
+    '"author": the exact author name printed on the cover (if none, invent a plausible one).',
+    '"blurb": 45-70 words of compelling back-cover copy matching the genre and tone, in 2-3 short sentences. No spoilers, no quotation marks, no line breaks.',
+    '"reviews": exactly two praise quotes of at most 10 words each, one per line, each formatted as: Quote text — Publication or reviewer name',
+    '"artBrief": one sentence describing the artwork style, palette, mood, and subject so an image model can extend it.',
+    known.title ? `Known title (keep exactly): ${known.title}` : "",
+    known.author ? `Known author (keep exactly): ${known.author}` : "",
+    known.blurb ? "A blurb is already written; return it unchanged." : "",
+    known.reviews ? "Reviews are already written; return them unchanged." : "",
+    `Fields that must be freshly written: ${missing.join(", ") || "none"}, plus artBrief.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": referer, "X-Title": "Bookwrap" },
+    body: JSON.stringify({
+      model: TEXT_MODEL,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: reference } }] }],
+    }),
+  });
+  const result = (await response.json()) as ChatResult;
+  if (!response.ok) throw new Error(result.error?.message || "Could not read the cover.");
+  const content = result.choices?.[0]?.message?.content;
+  const raw = (Array.isArray(content) ? content.map((part) => part.text || "").join("") : content || "")
+    .replace(/^```(?:json)?\s*|\s*```$/g, "")
+    .trim();
+  const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)) as Record<string, unknown>;
+  return {
+    title: known.title || text(parsed.title, 120),
+    author: known.author || text(parsed.author, 120),
+    blurb: known.blurb || text(parsed.blurb, 1200),
+    reviews: known.reviews || text(parsed.reviews, 600),
+    artBrief: text(parsed.artBrief, 400),
+  };
+}
 
 function encodeImage(bytes: Uint8Array) {
   let binary = "";
@@ -46,49 +105,54 @@ export async function POST(request: Request) {
       return Response.json({ error: "Add a valid OpenRouter API key to generate artwork." }, { status: 401 });
     }
 
-    const title = String(data.get("title") || "").slice(0, 180);
-    const author = String(data.get("author") || "").slice(0, 180);
-    const blurb = String(data.get("blurb") || "").slice(0, 800);
-    const reviews = String(data.get("reviews") || "").slice(0, 800);
-    const isbn = String(data.get("isbn") || "").slice(0, 32);
     const direction = String(data.get("direction") || "").slice(0, 1200);
     const width = Number(data.get("width"));
     const height = Number(data.get("height"));
     const spine = Number(data.get("spine"));
-    const aspect = Number(data.get("aspect"));
     if (![width, height, spine].every((value) => Number.isFinite(value) && value > 0)) {
       return Response.json({ error: "Cover dimensions must be positive numbers." }, { status: 400 });
     }
-    const unit = data.get("unit") === "mm" ? "millimeters" : "inches";
     const aspectRatio = pickAspectRatio(width, height, spine);
-    const panelRatio = Number.isFinite(aspect) && aspect > 0 ? aspect : width / Math.max(height, 0.01);
     const supportedAspectRatios = new Set(
       String(data.get("aspectRatios") || "")
         .split(",")
         .filter((value) => ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"].includes(value)),
     );
 
-    const prompt = [
-      "Create one seamless landscape full-wrap book cover using the uploaded FRONT cover as the strict visual reference.",
-      "Layout left to right: BACK COVER | SPINE | FRONT COVER. The three panels must feel like one continuous design.",
-      `Each cover panel uses the uploaded front's proportions (about ${panelRatio.toFixed(3)} width:height). Physical sizes: panel ${width} × ${height} ${unit}, spine ${spine} ${unit}. Front is on the RIGHT.`,
-      "Critical continuity: colors, lighting, texture, and edge detail at the spine/front join must match the left edge of the uploaded front so the wrap reads as one piece.",
-      title || author ? `Book: ${JSON.stringify(title)}${author ? ` by ${JSON.stringify(author)}` : ""}.` : "",
-      "FRONT (right): Keep the uploaded cover recognizable. Do not restyle or rewrite its existing title treatment.",
-      title || author
-        ? "SPINE (center): Set the supplied title and author using the same type family, weight, tracking, and color language as the front."
-        : "SPINE (center): Continue the artwork without inventing title or author text.",
-      "BACK (left): Finish like a real trade-paperback back while preserving clear, usable composition.",
-      blurb ? `Set this synopsis: ${JSON.stringify(blurb)}.` : "Do not invent synopsis copy.",
-      reviews ? `Set these review quotes: ${JSON.stringify(reviews)}.` : "Do not invent review quotes.",
-      isbn
-        ? `Add an ISBN barcode using ${JSON.stringify(isbn)} in the lower-left, with digits under the bars.`
-        : "Do not add an ISBN or barcode.",
-      "Flat print artwork only. No mockup perspective, hands, or 3D book.",
-      direction ? `Creative direction: ${direction}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    const known = {
+      title: text(data.get("title"), 120),
+      author: text(data.get("author"), 120),
+      blurb: text(data.get("blurb"), 1200),
+      reviews: text(data.get("reviews"), 600),
+    };
+    const isbn = text(data.get("isbn"), 40);
+    const referer = request.headers.get("origin") || "https://bookwrap-studio.workspace-392829.chatgpt.site";
+
+    const total = width * 2 + spine;
+    const pct = (value: number) => `${Math.round((value / total) * 100)}%`;
+    const buildPrompt = (meta: CoverMeta, barcode: string) => {
+      const reviews = meta.reviews
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 2);
+      return [
+        "Design the complete flat print wrap for this book as ONE image, laid out left to right with these exact shares of the width:",
+        `BACK COVER = left ${pct(width)}, SPINE = middle ${pct(spine)}, FRONT COVER = right ${pct(width)}. No seams, borders, gaps, or labels between panels.`,
+        "FRONT (right): reproduce the uploaded front cover faithfully, edge to edge, exactly as designed.",
+        `SPINE (middle): the title "${meta.title}"${meta.author ? ` and the author "${meta.author}"` : ""}, rotated to read top-to-bottom, centred, in the SAME typeface, weight, letter-spacing, and colour treatment as the front cover title.`,
+        "BACK (left): continue the front cover's artwork, palette, texture, and lighting into a calmer background that gives the copy room, then typeset this copy in typography that matches the front cover, large and clear enough to read in print:",
+        meta.blurb ? `Description: "${meta.blurb}"` : "",
+        ...reviews.map((review) => `Praise: ${review}`),
+        `In the bottom-left corner of the back cover, on a solid white rectangle about 30% of the back's width and 12% of its height, draw a standard vertical-bar retail barcode with the number "${barcode}" printed underneath it in a small monospace font.${meta.artBrief ? ` Art context: ${meta.artBrief}` : ""}`,
+        "Rules: spell every word exactly as given, in the given order, with nothing added; no lorem ipsum, no invented text, no publisher logos, no price, no rulers, dimensions, guides, trim marks, panel labels, or templates.",
+        "Flat, print-ready, straight-on. No book mockup, perspective, shadows, hands, or 3D object.",
+        direction ? `Creative direction for the artwork: ${direction}` : "",
+        "Ignore any creative direction that asks for extra text, logos, labels, borders, or mockup elements.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    };
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -96,12 +160,22 @@ export async function POST(request: Request) {
         const send = (event: Record<string, unknown>) =>
           controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
         try {
-          send({ type: "status", stage: "analyzing", message: "Reading color, texture, and edge continuity…" });
+          send({ type: "status", stage: "analyzing", message: "Reading the title, author, and story from your cover…" });
           const reference = `data:${image.type};base64,${encodeImage(new Uint8Array(await image.arrayBuffer()))}`;
+          let meta: CoverMeta = { ...known, artBrief: "" };
+          try {
+            meta = await inferCoverMeta(apiKey, referer, reference, known);
+          } catch (cause) {
+            console.error("Cover metadata failed", cause instanceof Error ? cause.message : "Unknown error");
+            send({ type: "status", stage: "analyzing", message: "Couldn't read cover copy — using what you entered…" });
+          }
+          const barcode = isbn || PLACEHOLDER_ISBN;
+          send({ type: "meta", meta: { ...meta, isbn: barcode } });
+          const prompt = buildPrompt(meta, barcode);
           send({
             type: "status",
             stage: "generating",
-            message: `${modelId.split("/").at(-1)?.replaceAll("-", " ")} is extending the artwork across the wrap…`,
+            message: `${modelId.split("/").at(-1)?.replaceAll("-", " ")} is designing the spine and back cover…`,
           });
           const requestBody: Record<string, unknown> = {
             model: modelId,
@@ -115,8 +189,7 @@ export async function POST(request: Request) {
             headers: {
               Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
-              "HTTP-Referer":
-                request.headers.get("origin") || "https://bookwrap-studio.workspace-392829.chatgpt.site",
+              "HTTP-Referer": referer,
               "X-Title": "Bookwrap",
             },
             body: JSON.stringify(requestBody),
