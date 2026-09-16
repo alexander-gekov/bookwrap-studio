@@ -362,6 +362,32 @@ html, body { overflow-x: hidden; }
   border: 1px dashed rgba(255, 255, 255, 0.35);
   pointer-events: none; z-index: 2; grid-column: 1 / -1; grid-row: 1;
 }
+.cover-spread.is-jacket { min-width: min(100%, 720px); }
+.flap-panel {
+  background: linear-gradient(160deg, #152330, #0d171f);
+  padding: 8%; color: #fffdf4;
+}
+.flap-panel small {
+  display: block; margin-bottom: 7px;
+  font-size: 8px; font-weight: 800; letter-spacing: 0.12em;
+  text-transform: uppercase; color: #f7ff70;
+}
+.flap-panel p { margin: 0; font: 500 clamp(8px, 0.85vw, 13px) / 1.45 Georgia, serif; }
+.cover-spread.has-art .flap-panel {
+  background: linear-gradient(180deg, rgba(8, 14, 21, 0.4), rgba(8, 14, 21, 0.5));
+}
+.fold-guide {
+  position: absolute; top: 0; bottom: 0; width: 0;
+  border-left: 1px dashed rgba(247, 255, 112, 0.88);
+  z-index: 4; pointer-events: none;
+}
+.fold-guide b {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font: 800 6px / 1 Inter, Arial, sans-serif;
+  letter-spacing: 0.14em; color: #f7ff70; text-shadow: 0 1px 5px #111;
+}
+.fold-guide b:first-child { top: 4px; }
+.fold-guide b:last-child { bottom: 4px; }
 .job-overlay {
   position: absolute; inset: 0; z-index: 5;
   display: flex; align-items: center; justify-content: center; gap: 14px;

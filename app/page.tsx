@@ -23,7 +23,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IMAGE_MODELS, ModelPicker, type ImageModel } from "@/components/model-picker";
 
 type Unit = "in" | "mm";
-type CoverConfig = { width: number; height: number; spine: number; bleed: number; dpi: number; unit: Unit };
+type Format = "wrap" | "jacket";
+type CoverConfig = { width: number; height: number; spine: number; bleed: number; flap: number; dpi: number; unit: Unit; format: Format };
 type JobStatus = "idle" | "queued" | "analyzing" | "generating" | "compositing" | "ready" | "error";
 
 declare global {
@@ -34,7 +35,7 @@ declare global {
   }
 }
 
-const defaults: CoverConfig = { width: 6, height: 9, spine: 0.54, bleed: 0.125, dpi: 300, unit: "in" };
+const defaults: CoverConfig = { width: 6, height: 9, spine: 0.54, bleed: 0.125, flap: 3.25, dpi: 300, unit: "in", format: "jacket" };
 
 const toInches = (value: number, unit: Unit) => (unit === "in" ? value : value / 25.4);
 const toPx = (value: number, config: CoverConfig) => Math.round(toInches(value, config.unit) * config.dpi);
@@ -122,6 +123,7 @@ export default function Home() {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [blurb, setBlurb] = useState("");
+  const [bio, setBio] = useState("");
   const [reviews, setReviews] = useState("");
   const [isbn, setIsbn] = useState("");
   const [direction, setDirection] = useState("");
@@ -135,27 +137,45 @@ export default function Home() {
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const jacket = config.format === "jacket";
   const dims = useMemo(() => {
     const trimW = toPx(config.width, config);
     const trimH = toPx(config.height, config);
     const spineW = Math.max(1, toPx(config.spine, config));
     const bleed = toPx(config.bleed, config);
+    const flapW = jacket ? Math.max(1, toPx(config.flap, config)) : 0;
+    const backX = bleed + flapW;
+    const spineX = backX + trimW;
+    const frontX = spineX + spineW;
+    const frontFlapX = frontX + trimW;
     return {
       trimW,
       trimH,
       spineW,
+      flapW,
       bleed,
-      totalW: trimW * 2 + spineW + bleed * 2,
+      backX,
+      spineX,
+      frontX,
+      frontFlapX,
+      folds: jacket ? [backX, spineX, frontX, frontFlapX] : [backX, spineX],
+      totalW: flapW * 2 + trimW * 2 + spineW + bleed * 2,
       totalH: trimH + bleed * 2,
     };
-  }, [config]);
+  }, [config, jacket]);
 
-  const totalDisplay = config.width * 2 + config.spine + config.bleed * 2;
+  const innerDisplay = config.width * 2 + config.spine + (jacket ? config.flap * 2 : 0);
+  const totalDisplay = innerDisplay + config.bleed * 2;
   const heightDisplay = config.height + config.bleed * 2;
+  const foldPercents = (
+    jacket
+      ? [config.flap, config.flap + config.width, config.flap + config.width + config.spine, config.flap + config.width * 2 + config.spine]
+      : [config.width, config.width + config.spine]
+  ).map((value) => (value / innerDisplay) * 100);
   const ready = Boolean(coverUrl);
   const canDownload = status === "ready" && Boolean(generatedUrl);
 
-  const updateConfig = useCallback((key: keyof CoverConfig, value: number | Unit) => {
+  const updateConfig = useCallback((key: keyof CoverConfig, value: number | Unit | Format) => {
     setConfig((current) => ({ ...current, [key]: value }));
     setGeneratedUrl("");
     setStatus("idle");
@@ -184,8 +204,10 @@ export default function Home() {
             height: { type: "number", minimum: 1 },
             spine: { type: "number", minimum: 0.05 },
             bleed: { type: "number", minimum: 0 },
+            flap: { type: "number", minimum: 0.5 },
             dpi: { type: "number", enum: [150, 300, 600] },
             unit: { type: "string", enum: ["in", "mm"] },
+            format: { type: "string", enum: ["wrap", "jacket"] },
           },
           required: ["width", "height", "spine", "bleed", "dpi", "unit"],
           additionalProperties: false,
@@ -257,6 +279,7 @@ export default function Home() {
     form.append("title", title);
     form.append("author", author);
     form.append("blurb", blurb);
+    form.append("bio", bio);
     form.append("reviews", reviews);
     form.append("isbn", isbn);
     form.append("apiKey", apiKey.trim());
@@ -265,6 +288,8 @@ export default function Home() {
     form.append("width", String(config.width));
     form.append("height", String(config.height));
     form.append("spine", String(config.spine));
+    form.append("flap", String(config.flap));
+    form.append("format", config.format);
     form.append("unit", config.unit);
     form.append("aspect", String(coverRatio));
 
@@ -326,30 +351,28 @@ export default function Home() {
 
     const front = await loadImage(coverUrl);
     const artwork = generatedUrl ? await loadImage(generatedUrl) : null;
-    const backX = dims.bleed;
-    const spineX = dims.bleed + dims.trimW;
-    const frontX = dims.bleed + dims.trimW + dims.spineW;
+    const { backX, spineX, frontX, frontFlapX, flapW } = dims;
     const panelY = dims.bleed;
 
     ctx.fillStyle = "#111922";
     ctx.fillRect(0, 0, dims.totalW, dims.totalH);
 
     if (artwork) {
-      const artUnits = dims.trimW * 2 + dims.spineW;
-      const artBackW = (artwork.width * dims.trimW) / artUnits;
-      const artSpineW = (artwork.width * dims.spineW) / artUnits;
-      drawPanelSlice(ctx, artwork, 0, artBackW, 0, 0, dims.bleed + dims.trimW, dims.totalH);
-      drawPanelSlice(ctx, artwork, artBackW, artSpineW, spineX, 0, dims.spineW, dims.totalH);
-      drawPanelSlice(
-        ctx,
-        artwork,
-        artBackW + artSpineW,
-        artwork.width - artBackW - artSpineW,
-        frontX,
-        0,
-        dims.trimW + dims.bleed,
-        dims.totalH,
-      );
+      const artUnits = flapW * 2 + dims.trimW * 2 + dims.spineW;
+      const u = artwork.width / artUnits;
+      const artFlapW = flapW * u;
+      const artBackW = dims.trimW * u;
+      const artSpineW = dims.spineW * u;
+      if (jacket && flapW) {
+        drawPanelSlice(ctx, artwork, 0, artFlapW, 0, 0, dims.bleed + flapW, dims.totalH);
+        drawPanelSlice(ctx, artwork, artFlapW, artBackW, backX, 0, dims.trimW, dims.totalH);
+        drawPanelSlice(ctx, artwork, artFlapW + artBackW, artSpineW, spineX, 0, dims.spineW, dims.totalH);
+        drawPanelSlice(ctx, artwork, artFlapW + artBackW + artSpineW + artBackW, artFlapW, frontFlapX, 0, flapW + dims.bleed, dims.totalH);
+      } else {
+        drawPanelSlice(ctx, artwork, 0, artBackW, 0, 0, dims.bleed + dims.trimW, dims.totalH);
+        drawPanelSlice(ctx, artwork, artBackW, artSpineW, spineX, 0, dims.spineW, dims.totalH);
+        drawPanelSlice(ctx, artwork, artBackW + artSpineW, artwork.width - artBackW - artSpineW, frontX, 0, dims.trimW + dims.bleed, dims.totalH);
+      }
     }
 
     drawCover(ctx, front, frontX, panelY, dims.trimW, dims.trimH);
@@ -357,6 +380,10 @@ export default function Home() {
     if (!artwork) {
       ctx.fillStyle = "rgba(7,13,20,.42)";
       ctx.fillRect(backX, panelY, dims.trimW, dims.trimH);
+      if (jacket && flapW) {
+        ctx.fillRect(dims.bleed, panelY, flapW, dims.trimH);
+        ctx.fillRect(frontFlapX, panelY, flapW, dims.trimH);
+      }
       ctx.fillStyle = "rgba(7,13,20,.18)";
       ctx.fillRect(spineX, 0, dims.spineW, dims.totalH);
     } else {
@@ -370,7 +397,24 @@ export default function Home() {
     ctx.fillStyle = "#fffdf4";
     ctx.textBaseline = "top";
 
-    if (blurb.trim()) {
+    if (jacket && flapW > 40) {
+      const flapPad = Math.max(28, flapW * 0.1);
+      const flapSize = Math.max(18, Math.round(flapW * 0.055));
+      ctx.font = `700 ${Math.max(12, Math.round(flapSize * 0.7))}px Arial`;
+      ctx.fillText(author ? `ABOUT ${author.toUpperCase()}` : "ABOUT THE AUTHOR", dims.bleed + flapPad, panelY + flapPad);
+      ctx.font = `500 ${flapSize}px Georgia, serif`;
+      wrapLines(ctx, bio.trim() || "Author biography", flapW - flapPad * 2, 8).forEach((text, i) => {
+        ctx.fillText(text, dims.bleed + flapPad, panelY + flapPad + flapSize * 1.4 + i * flapSize * 1.38);
+      });
+      ctx.font = `700 ${Math.max(12, Math.round(flapSize * 0.7))}px Arial`;
+      ctx.fillText((title || "FRONT FLAP").toUpperCase(), frontFlapX + flapPad, panelY + flapPad);
+      ctx.font = `500 ${flapSize}px Georgia, serif`;
+      wrapLines(ctx, blurb.trim() || "Front-flap synopsis", flapW - flapPad * 2, 8).forEach((text, i) => {
+        ctx.fillText(text, frontFlapX + flapPad, panelY + flapPad + flapSize * 1.4 + i * flapSize * 1.38);
+      });
+    }
+
+    if (!jacket && blurb.trim()) {
       const fontSize = Math.max(28, Math.round(dims.trimW * 0.038));
       ctx.font = `500 ${fontSize}px Georgia, serif`;
       wrapLines(ctx, blurb.trim(), maxCopy, 7).forEach((text) => {
@@ -436,13 +480,53 @@ export default function Home() {
       ctx.restore();
     }
 
-    ctx.strokeStyle = "rgba(0,0,0,.22)";
-    ctx.lineWidth = Math.max(1, Math.round(config.dpi / 150));
-    ctx.setLineDash([12, 8]);
-    ctx.strokeRect(dims.bleed, dims.bleed, dims.totalW - dims.bleed * 2, dims.trimH);
+    const lw = Math.max(1, Math.round(config.dpi / 220));
+    const trimR = dims.totalW - dims.bleed;
+    const trimB = dims.bleed + dims.trimH;
+    const tick = Math.max(10, Math.round(config.dpi * 0.12));
+    ctx.save();
+    ctx.strokeStyle = "rgba(17,25,34,.55)";
+    ctx.lineWidth = lw;
     ctx.setLineDash([]);
+    for (const [x1, y1, x2, y2] of [
+      [dims.bleed, 0, dims.bleed, dims.bleed],
+      [trimR, 0, trimR, dims.bleed],
+      [dims.bleed, trimB, dims.bleed, dims.totalH],
+      [trimR, trimB, trimR, dims.totalH],
+      [0, dims.bleed, dims.bleed, dims.bleed],
+      [trimR, dims.bleed, dims.totalW, dims.bleed],
+      [0, trimB, dims.bleed, trimB],
+      [trimR, trimB, dims.totalW, trimB],
+    ] as const) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([Math.round(config.dpi * 0.045), Math.round(config.dpi * 0.03)]);
+    ctx.strokeStyle = "rgba(17,25,34,.78)";
+    ctx.font = `700 ${Math.max(11, Math.round(config.dpi * 0.042))}px Arial`;
+    ctx.fillStyle = "rgba(17,25,34,.78)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    dims.folds.forEach((x, i) => {
+      ctx.beginPath();
+      ctx.moveTo(x, dims.bleed);
+      ctx.lineTo(x, trimB);
+      ctx.stroke();
+      if (!(jacket && (i === 1 || i === 2))) {
+        ctx.setLineDash([]);
+        ctx.fillText("FOLD", x, dims.bleed + tick * 0.55);
+        ctx.fillText("FOLD", x, trimB - tick * 0.55);
+        ctx.setLineDash([Math.round(config.dpi * 0.045), Math.round(config.dpi * 0.03)]);
+      }
+    });
+    ctx.setLineDash([10, 7]);
+    ctx.strokeStyle = "rgba(17,25,34,.28)";
+    ctx.strokeRect(dims.bleed, dims.bleed, dims.totalW - dims.bleed * 2, dims.trimH);
+    ctx.restore();
     return canvas;
-  }, [author, blurb, config.dpi, coverUrl, dims, generatedUrl, isbn, reviews, title]);
+  }, [author, bio, blurb, config.dpi, coverUrl, dims, generatedUrl, isbn, jacket, reviews, title]);
 
   const download = async (part: "wrap" | "front" | "spine" | "back") => {
     const source = await compose();
@@ -453,14 +537,17 @@ export default function Home() {
     let sx = 0;
     let sw = dims.totalW;
     const sh = dims.totalH;
-    if (part === "back") sw = dims.trimW + dims.bleed;
+    if (part === "back") {
+      sx = jacket ? dims.backX : 0;
+      sw = jacket ? dims.trimW : dims.backX + dims.trimW;
+    }
     if (part === "spine") {
-      sx = dims.bleed + dims.trimW;
+      sx = dims.spineX;
       sw = dims.spineW;
     }
     if (part === "front") {
-      sx = dims.bleed + dims.trimW + dims.spineW;
-      sw = dims.trimW + dims.bleed;
+      sx = dims.frontX;
+      sw = jacket ? dims.trimW : dims.trimW + dims.bleed;
     }
     crop.width = sw;
     crop.height = sh;
@@ -481,6 +568,7 @@ export default function Home() {
     setTitle("");
     setAuthor("");
     setBlurb("");
+    setBio("");
     setReviews("");
     setIsbn("");
     setDirection("");
@@ -500,7 +588,7 @@ export default function Home() {
           </span>
           <div>
             <strong>Bookwrap</strong>
-            <small>Front → spine → back</small>
+            <small>Print · fold · wrap</small>
           </div>
         </div>
         <nav className="step-nav" aria-label="Workflow">
@@ -524,10 +612,10 @@ export default function Home() {
 
       <section className="hero">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-          Turn a front cover into a full wrap.
+          Turn a front cover into a dust jacket.
         </motion.h1>
         <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.05 }}>
-          Upload your finished front. Generate a matching spine and back at the same proportions. Download print-ready PNGs.
+          Upload your finished front. Generate flaps, spine, and back. Print the sheet, fold on the marks, and wrap the book.
         </motion.p>
       </section>
 
@@ -602,7 +690,7 @@ export default function Home() {
 
           <Button className="generate-button" onClick={() => void generate()} disabled={isBusy(status)}>
             {isBusy(status) ? <LoaderCircle className="spin" /> : <Sparkles />}
-            {isBusy(status) ? statusMessage || "Generating…" : "Generate wrap"}
+            {isBusy(status) ? statusMessage || "Generating…" : jacket ? "Generate jacket" : "Generate wrap"}
           </Button>
 
           <AnimatePresence>
@@ -623,7 +711,7 @@ export default function Home() {
                   <Download /> Front
                 </Button>
                 <Button className="download-wrap" onClick={() => void download("wrap")}>
-                  <Download /> Full wrap
+                  <Download /> {jacket ? "Print jacket" : "Full wrap"}
                 </Button>
               </motion.div>
             )}
@@ -637,11 +725,24 @@ export default function Home() {
 
             <TabsContent value="simple" className="options-panel">
               <p className="simple-note">
-                Trim size follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Open Advanced for spine, bleed, and optional cover copy.
+                Dust jacket with fold marks. Trim follows your upload ({config.width.toFixed(2)} × {config.height.toFixed(2)} {config.unit}). Open Advanced for flaps, spine, bleed, and copy.
               </p>
             </TabsContent>
 
             <TabsContent value="advanced" className="options-panel advanced-panel">
+              <div className="unit-row">
+                <Label>Format</Label>
+                <Select value={config.format} onValueChange={(value) => updateConfig("format", value as Format)}>
+                  <SelectTrigger className="unit-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="jacket">Dust jacket</SelectItem>
+                    <SelectItem value="wrap">Cover wrap</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="unit-row">
                 <Label>Units</Label>
                 <Select value={config.unit} onValueChange={(value) => updateConfig("unit", value as Unit)}>
@@ -660,6 +761,7 @@ export default function Home() {
                 <Field label="Trim height" suffix={config.unit} type="number" min="1" step="0.01" value={config.height} onChange={(event) => updateConfig("height", Number(event.target.value))} />
                 <Field label="Spine" suffix={config.unit} type="number" min="0.05" step="0.01" value={config.spine} onChange={(event) => updateConfig("spine", Number(event.target.value))} />
                 <Field label="Bleed" suffix={config.unit} type="number" min="0" step="0.001" value={config.bleed} onChange={(event) => updateConfig("bleed", Number(event.target.value))} />
+                {jacket && <Field label="Flap" suffix={config.unit} type="number" min="0.5" step="0.05" value={config.flap} onChange={(event) => updateConfig("flap", Number(event.target.value))} />}
               </div>
 
               <div className="unit-row">
@@ -686,9 +788,15 @@ export default function Home() {
                   <Input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="Optional" />
                 </div>
                 <div className="field-stack full">
-                  <Label>Back-cover copy</Label>
+                  <Label>{jacket ? "Front-flap synopsis" : "Back-cover copy"}</Label>
                   <Textarea value={blurb} onChange={(event) => setBlurb(event.target.value)} rows={3} placeholder="Optional" />
                 </div>
+                {jacket && (
+                  <div className="field-stack full">
+                    <Label>Author bio</Label>
+                    <Textarea value={bio} onChange={(event) => setBio(event.target.value)} rows={3} placeholder="Prints on the back flap" />
+                  </div>
+                )}
                 <div className="field-stack full">
                   <Label>Reviews</Label>
                   <Textarea value={reviews} onChange={(event) => setReviews(event.target.value)} rows={3} placeholder="Optional" />
@@ -711,7 +819,7 @@ export default function Home() {
           <div className="preview-header">
             <div>
               <p className="eyebrow">Live preview</p>
-              <h2>Full wrap</h2>
+              <h2>{jacket ? "Dust jacket" : "Full wrap"}</h2>
             </div>
             <div className="size-readout">
               <span>
@@ -757,25 +865,61 @@ export default function Home() {
                       : "Upload a front cover to preview the book"}
               </p>
             </div>
-            <div className="stage-labels">
-              <span>BACK</span>
-              <span>SPINE</span>
-              <span>FRONT</span>
+            <div
+              className="stage-labels"
+              style={{
+                gridTemplateColumns: jacket
+                  ? `${config.flap}fr ${config.width}fr ${config.spine}fr ${config.width}fr ${config.flap}fr`
+                  : `${config.width}fr ${config.spine}fr ${config.width}fr`,
+              }}
+            >
+              {jacket ? (
+                <>
+                  <span>BACK FLAP</span>
+                  <span>BACK</span>
+                  <span>SPINE</span>
+                  <span>FRONT</span>
+                  <span>FRONT FLAP</span>
+                </>
+              ) : (
+                <>
+                  <span>BACK</span>
+                  <span>SPINE</span>
+                  <span>FRONT</span>
+                </>
+              )}
             </div>
             <div className="stage-scroll">
               <motion.div
-                className={`cover-spread ${!ready ? "empty-spread" : ""} ${generatedUrl ? "has-art" : ""}`}
+                className={`cover-spread ${!ready ? "empty-spread" : ""} ${generatedUrl ? "has-art" : ""} ${jacket ? "is-jacket" : ""}`}
                 style={{
-                  gridTemplateColumns: `${config.width}fr ${config.spine}fr ${config.width}fr`,
-                  aspectRatio: `${totalDisplay} / ${heightDisplay}`,
+                  gridTemplateColumns: jacket
+                    ? `${config.flap}fr ${config.width}fr ${config.spine}fr ${config.width}fr ${config.flap}fr`
+                    : `${config.width}fr ${config.spine}fr ${config.width}fr`,
+                  aspectRatio: `${innerDisplay} / ${config.height}`,
                 }}
                 layout
               >
                 {generatedUrl && <img className="wrap-art" src={generatedUrl} alt="" />}
+              {jacket && (
+                <div className="panel flap-panel">
+                  {ready ? (
+                    <>
+                      <small>About the author</small>
+                      <p>{bio || "Back flap tucks inside the cover"}</p>
+                    </>
+                  ) : (
+                    <div className="empty-copy">
+                      <strong>Back flap</strong>
+                      <span>tucks inside</span>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="panel back-panel">
                 {ready ? (
                   <>
-                    <p className="back-copy">{blurb}</p>
+                    {!jacket && <p className="back-copy">{blurb}</p>}
                     <div className="back-reviews">
                       {parseReviews(reviews).map((review) => (
                         <blockquote key={review.quote}>
@@ -827,6 +971,31 @@ export default function Home() {
                   </div>
                 )}
               </div>
+              {jacket && (
+                <div className="panel flap-panel">
+                  {ready ? (
+                    <>
+                      <small>{title || "Front flap"}</small>
+                      <p>{blurb || "Front flap tucks inside the cover"}</p>
+                    </>
+                  ) : (
+                    <div className="empty-copy">
+                      <strong>Front flap</strong>
+                      <span>tucks inside</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {foldPercents.map((left, i) => (
+                <i key={left} className="fold-guide" style={{ left: `${left}%` }}>
+                  {!(jacket && (i === 1 || i === 2)) && (
+                    <>
+                      <b>FOLD</b>
+                      <b>FOLD</b>
+                    </>
+                  )}
+                </i>
+              ))}
               <i className="bleed-line" />
               {isBusy(status) && (
                 <div className="job-overlay">
